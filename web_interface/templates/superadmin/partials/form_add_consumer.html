@@ -1,0 +1,39 @@
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" id="modal">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Ajouter un Système Interne / User Final</h2>
+
+        <form method="post" 
+              hx-post="{% url 'superadmin_add_consumer_view' %}" 
+              hx-target="#dashboard-dynamic-content" 
+              hx-swap="innerHTML">
+            {% csrf_token %}
+
+            <div id="edit-form-error-message" class="text-red-600 text-sm font-semibold mb-3"></div>
+            
+            <input type="text" name="username" placeholder="Nom du système ou de l'utilisateur" required class="w-full mb-3 px-4 py-2 border rounded-lg">
+            <input type="email" name="email" placeholder="Email de contact" required class="w-full mb-3 px-4 py-2 border rounded-lg">
+            <input type="password" name="password" placeholder="Mot de passe / Clé d'API" required class="w-full mb-3 px-4 py-2 border rounded-lg">
+
+            <input type="hidden" name="role" value="WS_USER">
+
+            <div>
+                <label for="zone_id" class="block text-sm font-medium text-gray-700 mb-1">Zone (Obligatoire)</label>
+                <select name="zone_id" class="w-full mb-3 px-4 py-2 border rounded-lg" required>
+                    <option value="">Sélectionner une zone</option>
+                    {% for zone in zones %}
+                        <option value="{{ zone.id }}">{{ zone.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('modal').remove();"
+                        class="bg-gray-300 px-4 py-2 rounded-lg">Annuler</button>
+
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                    Ajouter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-semibold text-gray-800">
+        Tableau de Bord - Admin Zone <span class="text-[#a6183b]">{{ zone.nom }}</span>
+    </h1>
+
+    <div id="dashboard-content-wrapper">
+      {% csrf_token %} {% include "admin_zone/partials/dashboard_content.html" %}
+    </div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

@@ -1,0 +1,32 @@
+<div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md mx-auto">
+        <h3 class="text-xl font-semibold mb-4 text-gray-800">Gérer l'Alias pour : <span class="font-mono text-[#a6183b]">"{{ raw_currency.nom_devise_brut|default:raw_currency.code_iso_brut }}"</span></h3>
+        <p class="text-sm text-gray-600 mb-4">
+            <strong>Nom Brut:</strong> {{ raw_currency.nom_devise_brut|default:"-" }}<br>
+            <strong>Code ISO Brut:</strong> {{ raw_currency.code_iso_brut|default:"-" }}<br>
+            <strong>Taux Brut:</strong> {{ raw_currency.valeur_brute }}
+        </p>
+
+        <div id="form-error-message" class="text-red-500 text-sm mb-2"></div>
+
+        <form hx-post="{% url 'admin_technique_manage_alias' raw_currency_id=raw_currency.id %}" hx-target="#raw-currency-table-container" hx-swap="outerHTML">
+            <div class="mb-4">
+                <label for="official_currency_code" class="block text-sm font-medium text-gray-700">Devise Officielle à associer</label>
+                {# CORRECTION: Suppression de l'attribut 'required' du champ select #}
+                <select id="official_currency_code" name="official_currency_code" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">--- Aucune (Supprimer l'Alias) ---</option>
+                    {% for currency in official_currencies %}
+                        <option value="{{ currency.code }}" {% if existing_alias and existing_alias.devise_officielle.code == currency.code %}selected{% endif %}>
+                            {{ currency.code }} - {{ currency.nom }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('modal').remove();" class="bg-gray-300 px-4 py-2 rounded-lg">Annuler</button>
+                <button type="submit" class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-4 py-2 rounded-lg">Enregistrer l'Alias</button>
+            </div>
+        </form>
+    </div>
+</div>

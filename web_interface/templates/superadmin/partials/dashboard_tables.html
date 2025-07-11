@@ -1,0 +1,9 @@
+<div id="admin-table-container" class="bg-white rounded-xl shadow p-6 overflow-x-auto mb-6">
+    <h2 class="text-lg font-semibold mb-4 text-gray-700">Gestion des Administrateurs</h2>
+    {% include "superadmin/partials/user_table.html" with users=admins %}
+</div>
+
+<div id="consumer-table-container" class="bg-white rounded-xl shadow p-6 overflow-x-auto">
+    <h2 class="text-lg font-semibold mb-4 text-gray-700">Gestion des Consommateurs (Systèmes / Users Finaux)</h2>
+    {% include "superadmin/partials/user_table.html" with users=consumers empty_message="Aucun consommateur à afficher pour le moment." %}
+</div>

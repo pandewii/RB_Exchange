@@ -1,0 +1,32 @@
+{# Partial pour le formulaire de gestion des propriétés de la zone #}
+{# Idéalement, ce partial sera remplacé après la soumission du formulaire HTMX #}
+
+<div class="bg-white p-6 rounded-xl shadow" id="zone-properties-container">
+    <form hx-post="{% url 'admin_technique_zone_detail' pk=zone.pk %}"
+          hx-target="#zone-properties-container"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Propriétés de la Zone</h2>
+        
+        {# Affichage d'un message d'erreur spécifique au formulaire si applicable #}
+        {% if error_message %}
+            <div id="form-error-message" class="text-red-600 text-sm font-semibold mb-3">
+                {{ error_message }}
+            </div>
+        {% endif %}
+
+        <div class="space-y-4">
+            <div>
+                <label for="nom" class="block text-sm font-medium text-gray-700">Nom de la Zone</label>
+                <input type="text" name="nom" value="{{ zone.nom }}" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#a6183b] focus:border-[#a6183b]">
+            </div>
+            <div class="flex items-center">
+                <input id="is_active" name="is_active" type="checkbox" class="h-4 w-4 text-[#a6183b] border-gray-300 rounded focus:ring-[#a6183b]" {% if zone.is_active %}checked{% endif %}>
+                <label for="is_active" class="ml-2 block text-sm text-gray-900">Zone Active</label>
+            </div>
+        </div>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-4 py-2 rounded-xl shadow transition">Enregistrer les modifications</button>
+        </div>
+    </form>
+</div>

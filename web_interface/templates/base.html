@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>RB Exchange - La Rose Blanche</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# Retour aux CDNs pour Tailwind CSS et HTMX #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+</head>
+<script>
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+</script>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <header class="bg-[#a6183b] text-white p-4 shadow">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="{% if request.session.role == 'SUPERADMIN' %}{% url 'superadmin_dashboard' %}{% elif request.session.role == 'ADMIN_TECH' %}{% url 'admin_technique_dashboard' %}{% elif request.session.role == 'ADMIN_ZONE' %}{% url 'admin_zone_dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="flex items-center gap-3">
+                <img src="{% static 'img/img.png' %}" alt="Logo La Rose Blanche" class="h-10 w-auto">
+                <span class="text-lg font-semibold">RB_Exchange</span>
+            </a>
+            {% if request.session.user_id %}
+                <div class="flex items-center gap-6">
+                    <div class="text-right">
+                        <p class="text-sm font-medium">{{ request.session.email }}</p>
+                        <p class="text-xs text-red-200">{% now "j F Y, H:i" %}</p>
+                    </div>
+                    <a href="{% url 'logout' %}" class="bg-[#e61a3d] hover:bg-[#de193f] text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                        Déconnexion
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="flex-1 p-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="modal-container"></div>
+    <div id="notification-area" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        document.body.addEventListener('htmx:configRequest', (event) => {
+            if (document.querySelector('[name=csrfmiddlewaretoken]')) {
+                event.detail.headers['X-CSRFToken'] = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            }
+        });
+
+        function showNotification(message, level = 'success') {
+            const notificationArea = document.getElementById('notification-area');
+            if (!notificationArea) return;
+            const notif = document.createElement('div');
+            let bgColor = 'bg-green-100 border-green-400 text-green-700';
+            if (level === 'info') bgColor = 'bg-blue-100 border-blue-400 text-blue-700';
+            else if (level === 'error') bgColor = 'bg-red-100 border-red-400 text-red-700';
+            notif.className = `px-4 py-3 rounded shadow-lg transition-opacity duration-300 ${bgColor}`;
+            notif.innerText = message;
+            notificationArea.appendChild(notif);
+            setTimeout(() => {
+                notif.classList.add('opacity-0');
+                setTimeout(() => notif.remove(), 300);
+            }, 3000);
+        }
+
+         document.body.addEventListener('showSuccess', (evt) => {
+        const modalContainer = document.getElementById('modal-container');
+        if (modalContainer) modalContainer.innerHTML = '';
+        const message = (evt.detail && evt.detail.value) ? evt.detail.value : "Opération réussie.";
+        showNotification(message, 'success');
+        });
+
+
+        document.body.addEventListener('showInfo', (evt) => {
+        const modal = document.getElementById('modal-container');
+        if (modal) modal.innerHTML = '';
+
+        let message = "Information réussie.";
+
+        if (typeof evt.detail === "string") {
+            message = evt.detail;
+        } else if (evt.detail && evt.detail.value) {
+            message = evt.detail.value;
+        }
+
+        showNotification(message, 'info');
+        });
+
+
+
+
+        document.body.addEventListener('showError', (evt) => {
+            const message = (evt.detail && evt.detail.value) ? evt.detail.value : "Une erreur s'est produite.";
+            showNotification(message, 'error');
+        });
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            const retargetSelector = evt.detail.xhr.getResponseHeader("HX-Retarget");
+            if (retargetSelector) {
+                const targetElement = document.querySelector(retargetSelector);
+                if (targetElement) {
+                    targetElement.innerHTML = evt.detail.xhr.responseText;
+                }
+            }
+        });
+        
+        function toggleZoneField() {
+            const roleSelect = document.getElementById('role-select');
+            const zoneField = document.getElementById('zone-field');
+            if (roleSelect && zoneField) {
+                if (roleSelect.value === 'ADMIN_ZONE') {
+                    zoneField.style.display = 'block';
+                } else {
+                    zoneField.style.display = 'none';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

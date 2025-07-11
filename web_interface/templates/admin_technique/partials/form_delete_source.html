@@ -1,0 +1,16 @@
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" id="modal">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-sm text-center">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Supprimer la Source ?</h2>
+        <p class="mb-6 text-gray-600">Voulez-vous vraiment supprimer la source <strong>{{ source.nom }}</strong> ? Toutes les données brutes et les mappings qui en dépendent seront perdus.</p>
+
+        <form hx-post="{% url 'admin_technique_delete_source' pk=source.pk %}" 
+              hx-target="#source-details" 
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            <div class="flex justify-center gap-4">
+                <button type="button" onclick="document.getElementById('modal').remove()" class="bg-gray-300 px-4 py-2 rounded-lg">Annuler</button>
+                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">Confirmer la Suppression</button>
+            </div>
+        </form>
+    </div>
+</div>

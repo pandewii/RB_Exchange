@@ -1,0 +1,37 @@
+<div class="bg-white p-6 rounded-xl shadow" id="source-details">
+    <h2 class="text-lg font-semibold text-gray-700 mb-4">Source de Données</h2>
+
+    {% if source %}
+        <div class="space-y-3">
+            <p><strong>Nom :</strong> {{ source.nom }}</p>
+            <p><strong>URL :</strong> <a href="{{ source.url_source }}" target="_blank" class="text-blue-600 hover:underline">{{ source.url_source }}</a></p>
+            <p><strong>Scraper associé :</strong> <code class="bg-gray-200 px-2 py-1 rounded">{{ source.scraper_filename }}</code></p>
+            <div class="pt-4 flex gap-3">
+                <button 
+                    hx-get="{% url 'admin_technique_manage_source' pk=zone.pk %}"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML"
+                    class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-4 py-2 rounded-xl shadow transition">
+                    Modifier la Source
+                </button>
+                <button
+                    hx-get="{% url 'admin_technique_delete_source' pk=source.pk %}"
+                    hx-target="#modal-container"
+                    class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-xl shadow transition">
+                    Supprimer la Source
+                </button>
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-4">
+            <p class="text-gray-500 mb-4">Aucune source de données n'a été configurée for cette zone.</p>
+            <button 
+                hx-get="{% url 'admin_technique_manage_source' pk=zone.pk %}"
+                hx-target="#modal-container"
+                hx-swap="innerHTML"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl shadow transition">
+                + Configurer la Source
+            </button>
+        </div>
+    {% endif %}
+</div>

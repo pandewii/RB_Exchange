@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% csrf_token %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-semibold text-gray-800">Tableau de Bord - Admin Technique</h1>
+
+    <div class="bg-white p-6 rounded-xl shadow">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-700">Gestion des Zones Monétaires</h2>
+            <button 
+                hx-get="{% url 'admin_technique_add_zone' %}"
+                hx-target="#modal-container"
+                hx-swap="innerHTML"
+                class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-4 py-2 rounded-xl shadow transition">
+                + Ajouter une Zone
+            </button>
+        </div>
+
+        <div class="overflow-x-auto" id="zones-table-container">
+            {% include 'admin_technique/partials/_zones_table.html' %}
+        </div>
+    </div>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

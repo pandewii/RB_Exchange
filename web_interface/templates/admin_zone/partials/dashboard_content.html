@@ -1,0 +1,32 @@
+<div class="bg-white p-6 rounded-xl shadow">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold text-gray-700">Activation des Devises</h2>
+    </div>
+
+    {% if error %}
+        <p class="text-red-500">{{ error }}</p>
+    {% else %}
+        <div class="overflow-x-auto" id="activation-table-container">
+            <table class="w-full text-sm text-left text-gray-700">
+                <thead class="text-xs uppercase text-gray-600 border-b">
+                    <tr>
+                        <th class="py-2 px-4">Devise</th>
+                        <th class="py-2 px-4">Code ISO</th>
+                        <th class="py-2 px-4">Statut pour votre zone</th>
+                        <th class="py-2 px-4 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# CORRECTION: Inclure le partial pour chaque ligne #}
+                    {% for devise in all_mapped_devises %}
+                        {% include "admin_zone/partials/_currency_row.html" with devise=devise active_codes=active_codes %}
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-gray-500">Aucune devise mappée n'est disponible pour l'activation.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>

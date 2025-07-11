@@ -1,0 +1,38 @@
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" id="modal">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">
+            {% if source %}Modifier la source de{% else %}Configurer la source pour{% endif %} la zone {{ zone.nom }}
+        </h2>
+
+        <form hx-post="{% url 'admin_technique_manage_source' pk=zone.pk %}"
+              hx-target="#source-details"
+              hx-swap="outerHTML">
+            {% csrf_token %}
+
+            <div class="space-y-4">
+                <div>
+                    <label for="nom" class="block text-sm font-medium text-gray-700">Nom de la source (ex: Banque Centrale de...)</label>
+                    <input type="text" name="nom" value="{{ source.nom|default:'' }}" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="url_source" class="block text-sm font-medium text-gray-700">URL officielle de la source des taux</label>
+                    <input type="url" name="url_source" value="{{ source.url_source|default:'' }}" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="scraper_filename" class="block text-sm font-medium text-gray-700">Scraper à utiliser</label>
+                    <select name="scraper_filename" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+                        <option value="">Sélectionner un scraper...</option>
+                        {% for scraper in available_scrapers %}
+                            <option value="{{ scraper }}" {% if source and scraper == source.scraper_filename %}selected{% endif %}>{{ scraper }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('modal').remove()" class="bg-gray-300 px-4 py-2 rounded-lg">Annuler</button>
+                <button type="submit" class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-4 py-2 rounded-lg">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
