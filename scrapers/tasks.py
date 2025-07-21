@@ -28,7 +28,7 @@ def run_scraper_for_source(source_id):
 
     try:
         result = subprocess.run(
-            ['python', script_path], capture_output=True, text=True, check=True, timeout=60
+            ['python', script_path], capture_output=True, text=True, check=True, timeout=120
         )
         scraped_data = json.loads(result.stdout)
 

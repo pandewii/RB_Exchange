@@ -8,34 +8,30 @@ djangorestframework-simplejwt>=5.3.0
 # ENV config
 python-decouple>=3.8
 
-
 # PostgreSQL
 psycopg2>=2.9.9
 
-# CORS (pour futures API externes)
+# CORS
 django-cors-headers>=4.2.0
 
-# Scraping / Planification (Bloc 1)
+# Scraping & Task Scheduling
 celery>=5.3.6
 redis>=5.0.1
 django-celery-beat>=2.6.0
-
-undetected-chromedriver>=3.5.5
-setuptools==65.5.1
+httpx>=0.24
+eventlet
 
 # Swagger
 drf-yasg>=1.21.7
 
-# Frontend Dynamique
+# Frontend dynamique
 django-htmx>=1.16.0
 
-# Production server
+# Déploiement
 gunicorn>=21.2.0
 
-# Email utils
+# Utilitaires
 email-validator
-
 requests
 bs4
-eventlet
-
+python-dotenv
