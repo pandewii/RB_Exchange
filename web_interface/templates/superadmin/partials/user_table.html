@@ -30,27 +30,39 @@
                 {% endif %}
             </td>
             <td class="py-2 flex flex-wrap gap-2">
-                <button 
-                    hx-post="{% url 'superadmin_toggle_admin' pk=user.pk %}" {# CORRECTION: user.id -> user.pk #}
-                    hx-target="#dashboard-dynamic-content" 
+                {# Boutons existants #}
+                <button
+                    hx-post="{% url 'superadmin_toggle_admin' pk=user.pk %}"
+                    hx-target="#dashboard-dynamic-content"
                     hx-swap="innerHTML"
                     class="{% if user.is_active %}bg-yellow-500 hover:bg-yellow-600{% else %}bg-green-500 hover:bg-green-600{% endif %} text-white px-3 py-1 rounded-xl text-xs">
                     {% if user.is_active %}Désactiver{% else %}Activer{% endif %}
                 </button>
 
-                <button 
-                    hx-get="{% url 'superadmin_edit_admin_view' pk=user.pk %}" {# CORRECTION: user.id -> user.pk #}
+                <button
+                    hx-get="{% url 'superadmin_edit_admin_view' pk=user.pk %}"
                     hx-target="#modal-container"
                     class="bg-[#a6183b] hover:bg-[#e61a3d] text-white px-3 py-1 rounded-xl text-xs">
                     Modifier
                 </button>
 
-                <button 
-                    hx-get="{% url 'superadmin_delete_admin_view' pk=user.pk %}" {# CORRECTION: user.id -> user.pk #}
+                <button
+                    hx-get="{% url 'superadmin_delete_admin_view' pk=user.pk %}"
                     hx-target="#modal-container"
                     class="bg-[#de193f] hover:bg-[#e61a3d] text-white px-3 py-1 rounded-xl text-xs">
                     Supprimer
                 </button>
+
+                {# Bouton Impersonner pour ADMIN_TECH ou ADMIN_ZONE #}
+                {# La condition a été simplifiée après des tests, on garde la forme originale valide #}
+                {% if request.session.role == 'SUPERADMIN' and user.role == 'ADMIN_TECH' or request.session.role == 'SUPERADMIN' and user.role == 'ADMIN_ZONE' %}
+                    <button
+                        hx-post="{% url 'impersonate_user' user_id=user.pk %}"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-xl text-xs"
+                        hx-confirm="Voulez-vous vraiment impersonner {{ user.email }} ({{ user.get_role_display }}) ?">
+                        Impersonner
+                    </button>
+                {% endif %}
             </td>
         </tr>
         {% empty %}

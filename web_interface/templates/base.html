@@ -26,6 +26,20 @@
             </a>
             {% if request.session.user_id %}
                 <div class="flex items-center gap-6">
+                    {# NOUVELLE CONDITION POUR LE BOUTON REVERT : Vérifier si la pile d'impersonation n'est PAS vide #}
+                    {% if request.session.impersonation_stack %}
+                        <div class="bg-blue-700 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
+                            Impersonation de {{ request.session.email }}
+                            <button 
+                                hx-post="{% url 'revert_impersonation' %}" 
+                                hx-swap="none" {# La redirection est gérée par HX-Redirect dans la vue Python #}
+                                class="ml-2 text-white hover:text-blue-200" 
+                                title="Revenir à votre rôle original">
+                                &times; Revenir
+                            </button>
+                        </div>
+                    {% endif %}
+
                     <div class="text-right">
                         <p class="text-sm font-medium">{{ request.session.email }}</p>
                         <p class="text-xs text-red-200">{% now "j F Y, H:i" %}</p>
