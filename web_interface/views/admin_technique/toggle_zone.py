@@ -3,23 +3,34 @@
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from django.views import View # CORRECTION: Importer View
+from django.views import View
 from core.models import ZoneMonetaire
+# MODIFICATION : Importer la fonction shared
 from .shared import get_zones_with_status
 
-# CORRECTION: Convertir la fonction en classe View
 class ToggleZoneView(View):
-    def post(self, request, pk): # Acceptera uniquement les requêtes POST
+    def post(self, request, pk):
         if request.session.get("role") != "ADMIN_TECH":
-            return HttpResponse("Accès non autorisé.", status=403)
+            # CORRECTION : Retourner un toast d'erreur
+            return HttpResponse("Accès non autorisé.", status=403, headers={'HX-Trigger': '{"showError": "Accès non autorisé."}'})
             
         zone = get_object_or_404(ZoneMonetaire, pk=pk)
         zone.is_active = not zone.is_active
         zone.save()
 
-        # On utilise la fonction partagée pour le rafraîchissement
-        zones_data = get_zones_with_status()
-        html = render_to_string("admin_technique/partials/_zones_table.html", {"zones_with_status": zones_data})
+        # MODIFICATION : Appeler la fonction shared avec l'objet request
+        # Et déstructurer les résultats : zones_data ET current_user_role
+        zones_data, current_user_role = get_zones_with_status(request)
+        
+        # MODIFICATION : Passer le contexte complet au template
+        html = render_to_string(
+            "admin_technique/partials/_zones_table.html",
+            {
+                "zones_with_status": zones_data,
+                "current_user_role": current_user_role, # Passer le rôle explicitement
+            },
+            request=request
+        )
         
         response = HttpResponse(html)
         status_text = "activée" if zone.is_active else "désactivée"

@@ -5,6 +5,7 @@ from django.views import View
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from core.models import Devise, DeviseAlias, ScrapedCurrencyRaw
+# MODIFICATION : Importer get_daily_photocopy depuis shared
 from .shared import get_daily_photocopy
 
 class ManageAliasView(View):
@@ -20,13 +21,14 @@ class ManageAliasView(View):
         if alias_candidate_raw:
             existing_alias = DeviseAlias.objects.filter(alias=alias_candidate_raw.upper()).first()
         
+        # MODIFICATION : Passer 'current_user_role' au contexte pour le rendu GET
         context = {
             "raw_currency": raw_currency,
             "official_currencies": Devise.objects.order_by('code'),
             "existing_alias": existing_alias,
             "alias_candidate": alias_candidate_raw.upper() if alias_candidate_raw else '',
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
         }
-        # CORRECTION: Supprimer 'request=request' car déjà passé en premier argument
         return render(request, "admin_technique/partials/form_manage_alias.html", context)
 
     def post(self, request, *args, **kwargs):
@@ -36,10 +38,20 @@ class ManageAliasView(View):
         raw_currency = get_object_or_404(ScrapedCurrencyRaw, pk=kwargs.get('raw_currency_id'))
         official_currency_code = request.POST.get('official_currency_code')
 
-        message_type = "showError" 
-        message_text = "Une erreur est survenue." 
+        message_type = "showError"
+        message_text = "Une erreur est survenue."
 
-        if not official_currency_code: 
+        # MODIFICATION : Context commun pour le rendu HTML en cas d'erreur
+        common_context_for_error = {
+            "raw_currency": raw_currency,
+            "official_currencies": Devise.objects.order_by('code'),
+            "existing_alias": DeviseAlias.objects.filter(alias=(raw_currency.nom_devise_brut or raw_currency.code_iso_brut).upper()).first(), # Recharger pour le formulaire d'erreur
+            "alias_candidate": (raw_currency.nom_devise_brut or raw_currency.code_iso_brut).upper(),
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
+        }
+
+
+        if not official_currency_code:
             aliases_deleted_count = 0
             
             if raw_currency.nom_devise_brut:
@@ -69,9 +81,12 @@ class ManageAliasView(View):
                     aliases_to_create_or_update.append(code_iso_upper)
             
             if not aliases_to_create_or_update:
-                response = HttpResponse('<div id="form-error-message">Aucun identifiant brut valide pour créer un alias.</div>')
-                response['HX-Retarget'] = '#form-error-message'
-                response.status_code = 400
+                # MODIFICATION : Utiliser le contexte commun pour l'erreur
+                common_context_for_error['error_message'] = "Aucun identifiant brut valide pour créer un alias."
+                response = HttpResponse(render_to_string("admin_technique/partials/form_manage_alias.html", common_context_for_error, request=request), status=400)
+                response['HX-Retarget'] = '#modal' # Cible la modale pour qu'elle soit remplacée avec le formulaire d'erreur
+                response['HX-Reswap'] = 'outerHTML'
+                response['HX-Trigger'] = '{"showError": "Aucun identifiant brut valide pour créer un alias."}'
                 return response
 
             for alias_str in aliases_to_create_or_update:
@@ -85,13 +100,14 @@ class ManageAliasView(View):
         source = raw_currency.source
         photocopy_of_the_day, aliases_dict = get_daily_photocopy(source) 
 
+        # MODIFICATION : Passer 'current_user_role' au contexte pour le rendu du partiel
         context = {
             "raw_currencies": photocopy_of_the_day,
             "aliases_dict": aliases_dict,
-            "close_modal": True 
+            "close_modal": True,
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
         }
         
-        # Le render_to_string dans le POST est correct car il rend un fragment HTML
         html = render_to_string("admin_technique/partials/_raw_currency_table.html", context, request=request)
         
         response = HttpResponse(html)

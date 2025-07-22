@@ -9,6 +9,13 @@ from logs.utils import log_action
 from django.conf import settings 
 
 class ImpersonateView(View):
+    """
+    Gère l'impersonation d'un utilisateur par un autre.
+    Les règles sont :
+    - SUPERADMIN peut impersonner ADMIN_TECH, ADMIN_ZONE, WS_USER.
+    - ADMIN_TECH peut impersonner ADMIN_ZONE.
+    - ADMIN_ZONE et WS_USER ne peuvent impersonner personne.
+    """
     def post(self, request, user_id):
         if not request.session.get('user_id'):
             return redirect('login')
@@ -35,43 +42,40 @@ class ImpersonateView(View):
             response['HX-Trigger'] = '{"showError": "Accès non autorisé : Vous n\'avez pas la permission d\'impersonner cet utilisateur."}'
             return response
 
-        # --- DÉBUT DE LA LOGIQUE DE PILE (STACK) POUR L'IMPERSONATION ---
-        
-        # Initialiser la pile si elle n'existe pas
+        # --- Logique de pile (STACK) pour l'impersonation ---
         if 'impersonation_stack' not in request.session:
             request.session['impersonation_stack'] = []
 
-        # Pousser l'état actuel de la session sur la pile
-        # Nous stockons le user_id, le role et l'email de l'utilisateur AVANT l'impersonation
         request.session['impersonation_stack'].append({
             'user_id': request.session['user_id'],
             'role': request.session['role'],
             'email': request.session['email'],
         })
-
-        # --- FIN DE LA LOGIQUE DE PILE ---
         
         # Mettre à jour la session avec les informations de l'utilisateur impersonné
         request.session['user_id'] = target_user.pk
         request.session['role'] = target_user.role
         request.session['email'] = target_user.email
         
-        # Enregistrer l'action dans les logs
-        # L'acteur est toujours l'utilisateur ORIGINAL (le vrai SuperAdmin/AdminTech qui a initié la chaîne)
-        # L'impersonateur est l'utilisateur ACTUEL au moment de l'impersonation
-        # Le target_user est celui que l'on commence à impersonner MAINTENANT
-        
-        # Récupérer l'utilisateur le plus original de la chaîne pour le log si la pile n'est pas vide
-        # ou l'original_user si c'est la première impersonation.
+        # Enregistrer l'action dans les logs avec un message amélioré
+        # Récupérer l'utilisateur le plus original de la chaîne pour le log
         root_actor_id = request.session['impersonation_stack'][0]['user_id'] if request.session['impersonation_stack'] else original_user.pk
         root_actor = get_object_or_404(CustomUser, pk=root_actor_id)
 
+        # MODIFICATION : Message details plus sémantique
+        log_details = (
+            f"L'utilisateur {root_actor.email} (ID: {root_actor.pk}, Rôle: {root_actor.get_role_display()}) "
+            f"a commencé à impersonner {target_user.email} (ID: {target_user.pk}, Rôle: {target_user.get_role_display()})."
+        )
+        if original_user.pk != root_actor.pk: # Si ce n'est pas la première impersonation dans la chaîne
+            log_details += f" Cela a été fait depuis l'impersonation de {original_user.email} (ID: {original_user.pk}, Rôle: {original_user.get_role_display()})."
+
         log_action(
-            actor_id=root_actor.pk,  # Le SuperAdmin/AdminTech à la racine de la chaîne
+            actor_id=root_actor.pk,
             impersonator_id=original_user.pk, # L'utilisateur d'où l'on vient (celui qu'on était juste avant)
             target_user_id=target_user.pk, # L'utilisateur qu'on commence à impersonner
             action='USER_IMPERSONATED',
-            details=f"L'utilisateur {root_actor.email} a impersonné {target_user.email} ({target_user.get_role_display()}) via {original_user.email}.",
+            details=log_details, # Utilisation du message détaillé
             level='info',
         )
 
@@ -122,17 +126,22 @@ class RevertImpersonationView(View):
         restored_user = get_object_or_404(CustomUser, pk=previous_state['user_id'])
         
         # Pour le log: l'acteur est le "root" actor (premier de la pile si elle n'est pas vide, sinon l'utilisateur restauré)
-        # l'impersonator est celui qu'on était juste avant de revenir.
         root_actor_id = request.session['impersonation_stack'][0]['user_id'] if request.session['impersonation_stack'] else restored_user.pk
         root_actor = get_object_or_404(CustomUser, pk=root_actor_id)
 
+        # MODIFICATION : Message details plus sémantique
+        log_details = (
+            f"L'utilisateur {root_actor.email} (ID: {root_actor.pk}, Rôle: {root_actor.get_role_display()}) "
+            f"est revenu de l'impersonation de {current_impersonated_user.email} (ID: {current_impersonated_user.pk}, Rôle: {current_impersonated_user.get_role_display()}) "
+            f"à {restored_user.email} (ID: {restored_user.pk}, Rôle: {restored_user.get_role_display()})."
+        )
 
         log_action(
             actor_id=root_actor.pk, 
             impersonator_id=current_impersonated_user.pk, # L'utilisateur qu'on a quitté
             target_user_id=restored_user.pk, # L'utilisateur vers qui on est revenu
             action='USER_REVERTED_IMPERSONATION',
-            details=f"L'utilisateur {root_actor.email} est revenu de l'impersonation de {current_impersonated_user.email} à {restored_user.email} ({restored_user.get_role_display()}).",
+            details=log_details, # Utilisation du message détaillé
             level='info',
         )
         

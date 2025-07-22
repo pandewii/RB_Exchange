@@ -22,7 +22,6 @@ class ManageScheduleView(View):
         enabled = request.POST.get('enabled') == 'on'
 
         # 1. On trouve ou on crée l'objet CrontabSchedule correspondant
-        # 'day_of_week': '*' signifie tous les jours de la semaine
         schedule, _ = CrontabSchedule.objects.get_or_create(
             minute=minute,
             hour=hour,
@@ -37,15 +36,15 @@ class ManageScheduleView(View):
         # 3. On crée ou on met à jour la PeriodicTask
         if source.periodic_task:
             task = source.periodic_task
-            task.crontab = schedule # On assigne le crontab
-            task.interval = None # On s'assure que l'intervalle est nul
+            task.crontab = schedule
+            task.interval = None
             task.enabled = enabled
             task.kwargs = task_kwargs
             task.save()
         else:
             task_name = f"Scraper pour Source ID {source.pk} - {source.nom}"
             task = PeriodicTask.objects.create(
-                crontab=schedule, # On utilise le crontab à la création
+                crontab=schedule,
                 name=task_name,
                 task='scrapers.tasks.run_scraper_for_source',
                 kwargs=task_kwargs,
@@ -54,9 +53,12 @@ class ManageScheduleView(View):
             source.periodic_task = task
             source.save()
 
-        # 4. On renvoie le template mis à jour via HTMX
-        context = {"source": source}
-        html = render_to_string("admin_technique/partials/_schedule_details.html", context)
+        # MODIFICATION : Passer 'current_user_role' au contexte pour le rendu du partiel
+        context = {
+            "source": source,
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
+        }
+        html = render_to_string("admin_technique/partials/_schedule_details.html", context, request=request)
         
         response = HttpResponse(html)
         response['HX-Trigger'] = '{"showSuccess": "Planification enregistrée avec succès."}'

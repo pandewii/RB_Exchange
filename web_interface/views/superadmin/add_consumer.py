@@ -5,11 +5,12 @@ from users.models import CustomUser
 from core.models.zone_monetaire import ZoneMonetaire
 from django.views.decorators.http import require_http_methods
 from email_validator import validate_email, EmailNotValidError
+# MODIFICATION : Importer la fonction shared
 from .shared import get_refreshed_dashboard_context_and_html
 
 @require_http_methods(["GET", "POST"])
 def add_consumer_view(request):
-    # CORRECTION: Suppression de la vérification de rôle redondante
+    # Suppression de la vérification de rôle redondante (déjà fait, laissé pour contexte)
     # if request.session.get("role") != "SUPERADMIN":
     #     return HttpResponse("Accès non autorisé.", status=403)
 
@@ -28,6 +29,7 @@ def add_consumer_view(request):
             response['HX-Retarget'] = '#edit-form-error-message'
             response['HX-Reswap'] = 'innerHTML'
             response.status_code = 400
+            response['HX-Trigger'] = '{"showError": "Adresse email invalide."}' # Ajout du toast d'erreur
             return response
         
         if CustomUser.objects.filter(email=email).exists():
@@ -35,6 +37,7 @@ def add_consumer_view(request):
             response['HX-Retarget'] = '#edit-form-error-message'
             response['HX-Reswap'] = 'innerHTML'
             response.status_code = 400
+            response['HX-Trigger'] = '{"showError": "Cet email est déjà utilisé."}' # Ajout du toast d'erreur
             return response
 
         if not zone_id:
@@ -42,6 +45,7 @@ def add_consumer_view(request):
             response['HX-Retarget'] = '#edit-form-error-message'
             response['HX-Reswap'] = 'innerHTML'
             response.status_code = 400
+            response['HX-Trigger'] = '{"showError": "La sélection d\'une zone est obligatoire."}' # Ajout du toast d'erreur
             return response
             
         CustomUser.objects.create(
@@ -53,10 +57,16 @@ def add_consumer_view(request):
             zone_id=zone_id
         )
         
-        html = get_refreshed_dashboard_context_and_html()
-        response = HttpResponse(html)
+        # MODIFICATION : Appeler la fonction shared avec l'objet request et les filtres
+        context, html_content = get_refreshed_dashboard_context_and_html(request) # context n'est pas utilisé ici directement pour le rendu
+        response = HttpResponse(html_content) # Utiliser le HTML généré par la fonction shared
         response['HX-Trigger'] = '{"showSuccess": "Utilisateur final/Système créé avec succès !"}'
         return response
 
     zones = ZoneMonetaire.objects.all()
-    return render(request, "superadmin/partials/form_add_consumer.html", {"zones": zones})
+    # MODIFICATION : Passer 'current_user_role' au contexte du formulaire GET
+    context = {
+        "zones": zones,
+        "current_user_role": request.session.get('role'), # Passer le rôle explicitement pour le formulaire
+    }
+    return render(request, "superadmin/partials/form_add_consumer.html", context)

@@ -61,15 +61,14 @@
                     <button
                         hx-get="{% url 'admin_technique_delete_zone' pk=item.zone.pk %}"
                         hx-target="#modal-container"
-                        hx-swap="innerHTML" 
+                        hx-swap="innerHTML"
                         class="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded-xl text-xs">
                         Supprimer
                     </button>
                     
-                    {# AJUSTEMENT : Bouton Impersonner pour l'AdminTechnique #}
-                    {# Utilise la variable admin_zone_user passée depuis la vue #}
-                    {% if request.session.role == 'ADMIN_TECH' and item.admin_zone_user %}
-                        <button 
+                    {# Bouton Impersonner pour l'AdminTechnique #}
+                    {% if current_user_role == 'ADMIN_TECH' and item.admin_zone_user %}
+                        <button
                             hx-post="{% url 'impersonate_user' user_id=item.admin_zone_user.pk %}"
                             hx-swap="none" {# La redirection est gérée par HX-Redirect dans la vue Python #}
                             hx-confirm="Voulez-vous vraiment impersonner l'AdminZone de {{ item.zone.nom }} ({{ item.admin_zone_user.email }})?"

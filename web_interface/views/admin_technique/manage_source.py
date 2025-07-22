@@ -1,8 +1,6 @@
 # web_interface/views/admin_technique/manage_source.py
 
 import os
-# import json # Plus nécessaire ici si le subprocess est déplacé vers Celery
-# import subprocess # Plus nécessaire ici si le subprocess est déplacé vers Celery
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.views import View
@@ -13,7 +11,6 @@ from scrapers.tasks import run_scraper_for_source # Importation de la tâche Cel
 
 def get_available_scrapers():
     try:
-        # Utilise la variable SCRAPERS_DIR de settings pour la portabilité
         scraper_dir = settings.SCRAPERS_DIR
         if not os.path.isdir(scraper_dir):
             return []
@@ -23,18 +20,20 @@ def get_available_scrapers():
 
 class ManageSourceView(View):
     def get(self, request, *args, **kwargs):
-        # Vérification du rôle est essentielle ici pour une vue non-API
         if request.session.get("role") != "ADMIN_TECH":
-            return HttpResponse("Accès non autorisé.", status=403) # Ou redirect('login')
+            return HttpResponse("Accès non autorisé.", status=403) 
 
         zone = get_object_or_404(ZoneMonetaire, pk=kwargs.get('pk'))
         source = None
         if hasattr(zone, 'source'):
             source = zone.source
+        
+        # MODIFICATION : Passer 'current_user_role' au contexte pour le rendu GET
         context = {
             "zone": zone,
             "source": source,
-            "available_scrapers": get_available_scrapers()
+            "available_scrapers": get_available_scrapers(),
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
         }
         return render(request, "admin_technique/partials/form_manage_source.html", context)
 
@@ -48,29 +47,35 @@ class ManageSourceView(View):
         scraper_filename = request.POST.get("scraper_filename", "").strip()
 
         if not all([nom, url_source, scraper_filename]):
-            # HX-Retarget permet d'afficher l'erreur dans un élément spécifique de la modale
-            response = HttpResponse('<p class="text-red-500">Tous les champs sont obligatoires.</p>')
-            response['HX-Retarget'] = '#form-error-message' # Supposant un div avec cet ID dans le form_manage_source.html
-            response.status_code = 400
+            # MODIFICATION : Passer 'current_user_role' au contexte de l'erreur du formulaire
+            context = {
+                "zone": zone,
+                "source": None, # Si la source n'est pas encore créée ou si erreur, ne pas passer l'objet source
+                "available_scrapers": get_available_scrapers(),
+                "error_message": "Tous les champs sont obligatoires.",
+                "current_user_role": request.session.get('role'), # Passer le rôle explicitement
+            }
+            response = HttpResponse(render_to_string("admin_technique/partials/form_manage_source.html", context, request=request), status=400)
+            response['HX-Retarget'] = '#modal' # Cible la modale pour qu'elle soit remplacée avec le formulaire d'erreur
+            response['HX-Reswap'] = 'outerHTML'
+            response['HX-Trigger'] = '{"showError": "Tous les champs sont obligatoires."}'
             return response
 
-        # Création ou mise à jour de la Source
         source, created = Source.objects.update_or_create(
             zone=zone,
             defaults={'nom': nom, 'url_source': url_source, 'scraper_filename': scraper_filename}
         )
         
-        # Correction CRITIQUE: Déclenchement ASYNCHRONE du scraper via Celery
-        run_scraper_for_source.delay(source.pk) # <- Appelle la tâche Celery
+        run_scraper_for_source.delay(source.pk)
 
-        # Préparation de la réponse HTMX: on rafraîchit les détails de la source
-        # et on déclenche une notification indiquant que le scraping est en cours.
-        context = {"zone": zone, "source": source}
-        html = render_to_string("admin_technique/partials/_source_details.html", context)
+        # MODIFICATION : Passer 'current_user_role' au contexte pour le rendu du partiel
+        context = {
+            "zone": zone, # Pour s'assurer que la zone est dispo dans le partial
+            "source": source,
+            "current_user_role": request.session.get('role'), # Passer le rôle explicitement
+        }
+        html = render_to_string("admin_technique/partials/_source_details.html", context, request=request)
         
         response = HttpResponse(html)
         response['HX-Trigger'] = '{"showInfo": "Source configurée. L\'exécution du scraper a été lancée en arrière-plan."}'
-        # Après le déclenchement asynchrone, la table des raw_currencies ne sera pas mise à jour immédiatement.
-        # Il faudra une méthode pour la rafraîchir une fois la tâche Celery terminée (via HTMX Polling ou WebSocket).
-        # Pour l'instant, le message "showInfo" indique le statut.
         return response
