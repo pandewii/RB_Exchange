@@ -1,5 +1,3 @@
-# web_interface/views/superadmin/add_admin.py
-
 from django.shortcuts import render
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
@@ -7,15 +5,11 @@ from users.models import CustomUser
 from core.models.zone_monetaire import ZoneMonetaire
 from django.views.decorators.http import require_http_methods
 from email_validator import validate_email, EmailNotValidError
-# MODIFICATION : Importer la fonction shared
 from .shared import get_refreshed_dashboard_context_and_html
+from logs.utils import log_action # Importation de log_action
 
 @require_http_methods(["GET", "POST"])
 def add_admin_view(request):
-    # Suppression de la vérification de rôle redondante (déjà fait, laissé pour contexte)
-    # if request.session.get("role") != "SUPERADMIN":
-    #     return HttpResponse("Accès non autorisé.", status=403)
-
     if request.method == "POST":
         username = request.POST.get("username")
         email = request.POST.get("email")
@@ -29,17 +23,17 @@ def add_admin_view(request):
         except EmailNotValidError as e:
             response = HttpResponse(f'<p>Adresse email invalide : {str(e)}</p>')
             response['HX-Retarget'] = '#form-error-message'
-            response['HX-Reswap'] = 'innerHTML'
+            response['HX-Reswap'] = 'innerHTML' 
             response.status_code = 400
-            response['HX-Trigger'] = '{"showError": "Adresse email invalide."}' # Ajout du toast d'erreur
+            response['HX-Trigger'] = '{"showError": "Adresse email invalide."}'
             return response
 
         if CustomUser.objects.filter(email=email).exists():
             response = HttpResponse('<p>Cet email est déjà utilisé. Veuillez en choisir un autre.</p>')
             response['HX-Retarget'] = '#form-error-message'
-            response['HX-Reswap'] = 'innerHTML'
+            response['HX-Reswap'] = 'innerHTML' 
             response.status_code = 400
-            response['HX-Trigger'] = '{"showError": "Cet email est déjà utilisé."}' # Ajout du toast d'erreur
+            response['HX-Trigger'] = '{"showError": "Cet email est déjà utilisé."}'
             return response
 
         if role == "ADMIN_ZONE" and not zone_id:
@@ -47,10 +41,10 @@ def add_admin_view(request):
             response['HX-Retarget'] = '#form-error-message'
             response['HX-Reswap'] = 'innerHTML'
             response.status_code = 400
-            response['HX-Trigger'] = '{"showError": "La zone est obligatoire pour ce rôle."}' # Ajout du toast d'erreur
+            response['HX-Trigger'] = '{"showError": "La zone est obligatoire pour ce rôle."}'
             return response
 
-        CustomUser.objects.create(
+        user = CustomUser.objects.create( # Capturer l'objet utilisateur créé
             username=username,
             email=email,
             password=make_password(password),
@@ -59,17 +53,33 @@ def add_admin_view(request):
             zone_id=zone_id if role == "ADMIN_ZONE" else None
         )
         
-        # MODIFICATION : Appeler la fonction shared avec l'objet request et les filtres
-        # Les filtres sont réinitialisés après ajout pour un affichage "propre"
-        context, html_content = get_refreshed_dashboard_context_and_html(request) # context ici n'est pas utilisé directement pour le rendu
-        response = HttpResponse(html_content) # Utiliser le HTML généré par la fonction shared
+        # MODIFICATION : Appeler log_action avec des détails plus sémantiques
+        zone_name = user.zone.nom if user.zone else "N/A"
+        log_details = (
+            f"L'administrateur {request.session.get('email')} ({request.session.get('role')}) "
+            f"a créé un nouvel administrateur {user.email} (Rôle: {user.get_role_display()}"
+        )
+        if user.role == "ADMIN_ZONE":
+            log_details += f", Zone: {zone_name})."
+        else:
+            log_details += ")."
+
+        log_action(
+            actor_id=request.session['user_id'],
+            action='ADMIN_CREATED',
+            details=log_details,
+            target_user_id=user.pk, # L'utilisateur nouvellement créé est la cible
+            level='info'
+        )
+        
+        context, html_content = get_refreshed_dashboard_context_and_html(request)
+        response = HttpResponse(html_content)
         response['HX-Trigger'] = '{"showSuccess": "Administrateur créé avec succès !"}'
         return response
 
     zones = ZoneMonetaire.objects.all()
-    # MODIFICATION : Passer 'current_user_role' au contexte du formulaire GET si le formulaire utilise cette variable
     context = {
         "zones": zones,
-        "current_user_role": request.session.get('role'), # Passer le rôle explicitement pour le formulaire
+        "current_user_role": request.session.get('role'),
     }
     return render(request, "superadmin/partials/form_add.html", context)

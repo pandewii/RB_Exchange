@@ -1,15 +1,17 @@
 # web_interface/views/superadmin/dashboard.py
 
 from django.shortcuts import render, redirect
-# from django.db.models import Q # Plus nécessaire ici si la logique est dans shared.py
-# from users.models import CustomUser # Plus nécessaire ici
-# from core.models.zone_monetaire import ZoneMonetaire # Plus nécessaire ici
-
-# MODIFICATION : Importer la fonction shared
+from core.models.zone_monetaire import ZoneMonetaire
+from users.models import CustomUser
+from logs.models import UINotification
 from .shared import get_refreshed_dashboard_context_and_html
+from django.http import HttpResponse
 
 def dashboard_view(request):
-    if request.session.get("role") != "SUPERADMIN":
+    user_role = request.session.get("role")
+    if user_role != "SUPERADMIN":
+        # Redirection vers la page de login si le rôle n'est pas SUPERADMIN ou non authentifié.
+        # Cela devrait gérer le cas AnonymousUser pour la vue principale.
         return redirect("login")
 
     # Récupérer tous les paramètres de filtre depuis la requête GET
@@ -18,22 +20,26 @@ def dashboard_view(request):
     zone_filter = request.GET.get('zone', 'all')
     role_filter = request.GET.get('role_filter', 'all')
 
-    # MODIFICATION : Appeler la fonction shared avec tous les paramètres
+    # Appeler la fonction shared avec tous les paramètres
     context, html_content = get_refreshed_dashboard_context_and_html(
-        request, # Passer l'objet request
+        request,
         search_query=search_query,
         status_filter=status_filter,
         zone_filter=zone_filter,
         role_filter=role_filter
     )
     
-    # Le html_content n'est pas utilisé pour le rendu initial, mais le context l'est.
-    # Pour le filtre de zone et de rôle dans le dashboard.html, vous avez besoin de toutes les zones
-    # et des rôles d'administrateur disponibles. Cela est déjà dans le contexte retourné par get_refreshed...
+    # MODIFICATION : Vérifier si l'utilisateur est authentifié avant de récupérer les notifications
+    unread_notifications = []
+    if request.user.is_authenticated: # AJOUT DE LA CONDITION
+        unread_notifications = UINotification.objects.filter(
+            user=request.user, 
+            is_read=False
+        ).order_by('-timestamp')[:10]
+
+    context['unread_notifications'] = unread_notifications
     
     if request.headers.get('HX-Request'):
-        # MODIFICATION : Retourner le HTML directement pour les requêtes HTMX
         return HttpResponse(html_content)
 
-    # MODIFICATION : Retourner le rendu complet pour la première charge de la page
     return render(request, "superadmin/dashboard.html", context)
