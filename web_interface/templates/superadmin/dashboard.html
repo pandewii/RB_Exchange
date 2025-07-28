@@ -23,11 +23,10 @@
         </div>
     </div>
 
-    {# EMPLACEMENT DU FORMULAIRE DE FILTRES (C'est la partie statique qui ne sera pas remplacée par HTMX) #}
-    {# Ses boutons radio sont mis à jour par Django au chargement initial et au re-render. #}
+    {# NOUVEL EMPLACEMENT DU FORMULAIRE DE FILTRES #}
     <form id="filters-form"
           hx-get="{% url 'superadmin_dashboard' %}"
-          hx-target="#dashboard-dynamic-content" {# RE-MODIFICATION CLÉ ICI : Cible uniquement le contenu dynamique #}
+          hx-target="#dashboard-dynamic-content" {# Cible le contenu dynamique des tables #}
           hx-swap="innerHTML"
           hx-push-url="true"
           hx-trigger="change, keyup from:[name='q'] changed delay:500ms">
@@ -80,6 +79,7 @@
     </form>
 
     {# Le contenu dynamique du tableau de bord (tables des utilisateurs) est inclus ici #}
+    {# Il ne contient PLUS le formulaire de filtres #}
     <div id="dashboard-dynamic-content" class="mt-6">
         {% include "superadmin/partials/dashboard_content.html" %}
     </div>

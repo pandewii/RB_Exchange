@@ -1,10 +1,11 @@
 # web_interface/views/common/audit_logs.py
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404 
 from django.views import View
 from django.db.models import Q
 from logs.models import LogEntry, UINotification
 from users.models import CustomUser
+from django.http import HttpResponse
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 
@@ -19,51 +20,55 @@ class AuditLogView(View):
         user_id = request.session.get('user_id')
 
         if not user_id or user_role not in ['SUPERADMIN', 'ADMIN_TECH', 'ADMIN_ZONE']:
-            return redirect('login') # Rediriger si non authentifié ou rôle non autorisé
+            return redirect('login') 
 
         logs_queryset = LogEntry.objects.select_related('actor', 'impersonator', 'target_user').order_by('-timestamp')
 
         # Application des filtres par rôle
         if user_role == 'ADMIN_TECH':
-            # Un Admin Technique peut voir tous les logs liés aux zones et sources,
-            # et les logs où il est l'acteur.
             logs_queryset = logs_queryset.filter(
                 Q(action__in=[
-                    "ZONE_CREATED", "ZONE_MODIFIED", "ZONE_DELETED", "ZONE_STATUS_TOGGLED", "ZONE_DELETION_FAILED",
+                    "ZONE_CREATED", "ZONE_MODIFIED", "ZONE_DELETED", "ZONE_STATUS_TOGGLED", "ZONE_DELETION_FAILED", "ZONE_PROPERTIES_UPDATE_FAILED", "ZONE_CREATION_FAILED",
                     "SOURCE_CONFIGURED", "SOURCE_MODIFIED", "SOURCE_DELETED", "SOURCE_CONFIGURATION_FAILED",
                     "SCHEDULE_CREATED", "SCHEDULE_MODIFIED", "SCHEDULE_DELETED", "SCHEDULE_MANAGEMENT_FAILED",
                     "ALIAS_CREATED", "ALIAS_MODIFIED", "ALIAS_DELETED", "ALIAS_MANAGEMENT_FAILED",
                     "SCRAPER_TIMEOUT", "SCRAPER_EXECUTION_ERROR", "SCRAPER_INVALID_JSON", "SCRAPER_UNEXPECTED_ERROR",
                     "RAW_DATA_DATE_PARSE_ERROR", "RAW_DATA_VALUE_PARSE_ERROR", "PIPELINE_CALCULATION_ERROR",
-                    "PIPELINE_ERROR", "PIPELINE_UNEXPECTED_ERROR_START"
+                    "PIPELINE_ERROR", "PIPELINE_UNEXPECTED_ERROR_START",
+                    "UNAUTHORIZED_ACCESS_ATTEMPT", # Admin Techs should see these too
+                    "UNAUTHORIZED_DASHBOARD_ACCESS", "USER_LOGIN_FAILED_API", "USER_NOT_FOUND",
+                    # Also actions on users that are AdminTechs themselves or consumers they manage if user management is part of their role.
+                    # For now, stick to the provided list from the prompt which covers infrastructure.
                 ]) |
-                Q(actor__pk=user_id) |
-                Q(impersonator__pk=user_id)
+                Q(actor__pk=user_id) | # If they are the root actor
+                Q(impersonator__pk=user_id) # If they were the one who impersonated
             )
 
         elif user_role == 'ADMIN_ZONE':
-            # Un Admin Zone ne voit que les logs liés à sa zone et les actions qu'il a effectuées.
-            # Cela est plus complexe car les logs n'ont pas directement un champ zone_id.
-            # Il faut filtrer par les objets liés à la zone (sources, devises activées, users de la zone).
-            # Pour simplifier, nous allons commencer par les actions qu'il a initiées.
-            # Un filtrage plus précis par zone nécessiterait de passer des informations de zone dans le log_entry lui-même.
-            # Pour l'instant, on se concentre sur les actions directes ou ciblées.
-
             current_user = get_object_or_404(CustomUser, pk=user_id)
             if not current_user.zone:
-                logs_queryset = LogEntry.objects.none() # Aucun log si Admin Zone sans zone
+                logs_queryset = LogEntry.objects.none() 
             else:
-                # Logs où l'Admin Zone est l'acteur ou la cible
+                # Filtrage basé sur le rôle AdminZone
+                # Il faut inclure les logs où l'AdminZone est l'acteur (directement ou impersonné par quelqu'un d'autre)
+                # ou si l'action concerne directement sa zone.
+
+                # Filter based on the log's actor/impersonator fields, AND/OR details string (as a fallback)
                 logs_queryset = logs_queryset.filter(
-                    Q(actor__pk=user_id) |
-                    Q(impersonator__pk=user_id) | # Si quelqu'un impersonne cet AdminZone
-                    Q(target_user__pk=user_id)    # Si cet AdminZone est la cible d'une action
-                ).filter(
-                    Q(action__in=["CURRENCY_ACTIVATION_TOGGLED"]) | # Actions spécifiques à l'Admin Zone
-                    Q(details__icontains=f"Zone: {current_user.zone.nom}") # Tente de filtrer les logs par nom de zone dans les détails
+                    Q(actor__pk=user_id) | # AdminZone is the root actor
+                    Q(impersonator__pk=user_id) | # AdminZone is the impersonated user for the action
+                    Q(target_user__pk=user_id) | # AdminZone is the target of the action
+                    Q(details__icontains=f"Zone: {current_user.zone.nom} (ID: {current_user.zone.pk})") # Specific filter for zone in details
+                ).filter( # Further filter by action types relevant to AdminZone
+                    Q(action__in=[
+                        "CURRENCY_ACTIVATION_TOGGLED",
+                        "ALIAS_CREATED", "ALIAS_MODIFIED", "ALIAS_DELETED", "ALIAS_MANAGEMENT_FAILED",
+                        "CURRENCY_TOGGLE_FAILED_NO_ZONE"
+                    ]) |
+                    # AdminZone also needs to see if someone (e.g. SuperAdmin) is impersonating *them*
+                    Q(action__in=["USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION"], target_user__pk=user_id) |
+                    Q(action__in=["USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION"], actor__pk=user_id) # If AdminZone initiates impersonation (unlikely per rules, but for completeness)
                 )
-                # Note: Le filtrage par 'details__icontains' est moins robuste.
-                # Idéalement, les LogEntry auraient une FK vers Zone si les actions sont spécifiques à une zone.
 
 
         # Application des filtres de recherche
@@ -79,7 +84,7 @@ class AuditLogView(View):
 
         # Pagination
         page = request.GET.get('page', 1)
-        paginator = Paginator(logs_queryset, 20) # 20 logs par page
+        paginator = Paginator(logs_queryset, 20) 
         try:
             logs = paginator.page(page)
         except PageNotAnInteger:
@@ -89,13 +94,12 @@ class AuditLogView(View):
 
         context = {
             'logs': logs,
-            'current_user_role': user_role, # Passer le rôle actuel pour le template
+            'current_user_role': user_role, 
             'search_query': search_query,
         }
         return render(request, "common/audit_log.html", context)
 
 
-# Vue pour marquer les notifications UI comme lues
 class MarkUINotificationReadView(View):
     def post(self, request, pk):
         if not request.session.get('user_id'):
@@ -105,6 +109,4 @@ class MarkUINotificationReadView(View):
         notification.is_read = True
         notification.save()
         
-        # Retourne simplement une réponse vide (204 No Content) ou le nouveau compte de notifications non lues.
-        # HX-Trigger sera utilisé pour rafraîchir le compte de notifications non lues si une icône de cloche est présente.
         return HttpResponse(status=204)

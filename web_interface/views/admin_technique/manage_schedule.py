@@ -7,13 +7,12 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from core.models import Source
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
-from logs.utils import log_action # Importation de log_action
+from logs.utils import log_action 
 
 class ManageScheduleView(View):
 
     def post(self, request, *args, **kwargs):
         if request.session.get("role") != "ADMIN_TECH":
-            # MODIFICATION : Log pour accès non autorisé
             log_action(
                 actor_id=request.session['user_id'],
                 action='UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -28,8 +27,9 @@ class ManageScheduleView(View):
         minute = request.POST.get('minute', '0')
         enabled = request.POST.get('enabled') == 'on'
 
-        # Déterminer si c'est une création ou une modification pour le log
-        is_creation = not source.periodic_task
+        # Capture zone_id and source_id for logging
+        zone_id = source.zone.pk if source.zone else None
+        source_id = source.pk
 
         schedule, _ = CrontabSchedule.objects.get_or_create(
             minute=minute,
@@ -44,7 +44,6 @@ class ManageScheduleView(View):
         if source.periodic_task:
             task = source.periodic_task
             
-            # Pour le log, enregistrer les changements
             old_hour = task.crontab.hour if task.crontab else 'N/A'
             old_minute = task.crontab.minute if task.crontab else 'N/A'
             old_enabled = task.enabled
@@ -57,7 +56,7 @@ class ManageScheduleView(View):
 
             log_details = (
                 f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
-                f"a modifié la planification de la source '{source.nom}' (ID: {source.pk})."
+                f"a modifié la planification de la source '{source.nom}' (ID: {source.pk}) pour la zone '{source.zone.nom}' (ID: {source.zone.pk})." # Added zone details
             )
             changes = []
             if old_hour != hour or old_minute != minute:
@@ -75,7 +74,9 @@ class ManageScheduleView(View):
                 action='SCHEDULE_MODIFIED',
                 details=log_details,
                 target_user_id=None,
-                level='info'
+                level='info',
+                zone_id=zone_id, # Pass zone_id
+                source_id=source_id # Pass source_id
             )
 
         else: # Creation of new schedule
@@ -92,7 +93,7 @@ class ManageScheduleView(View):
 
             log_details = (
                 f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
-                f"a créé une nouvelle planification pour la source '{source.nom}' (ID: {source.pk}). "
+                f"a créé une nouvelle planification pour la source '{source.nom}' (ID: {source.pk}) pour la zone '{source.zone.nom}' (ID: {source.zone.pk}). " # Added zone details
                 f"Exécution à {hour}:{minute}, Statut: {'Activée' if enabled else 'Désactivée'}."
             )
             log_action(
@@ -100,7 +101,9 @@ class ManageScheduleView(View):
                 action='SCHEDULE_CREATED',
                 details=log_details,
                 target_user_id=None,
-                level='info'
+                level='info',
+                zone_id=zone_id, # Pass zone_id
+                source_id=source_id # Pass source_id
             )
 
         context = {
