@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from core.models import Devise, DeviseAlias, ScrapedCurrencyRaw
 from .shared import get_daily_photocopy
-from logs.utils import log_action # Importation de log_action
+from logs.utils import log_action 
 
 class ManageAliasView(View):
     def get(self, request, *args, **kwargs):
@@ -32,7 +32,6 @@ class ManageAliasView(View):
 
     def post(self, request, *args, **kwargs):
         if request.session.get("role") != "ADMIN_TECH":
-            # MODIFICATION : Log pour accès non autorisé
             log_action(
                 actor_id=request.session['user_id'],
                 action='UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -49,6 +48,11 @@ class ManageAliasView(View):
         log_level = 'info'
         log_details = ""
         action_type = "ALIAS_MANAGEMENT_FAILED" # Default for errors
+        
+        # Capture zone_id and source_id for logging
+        zone_id = raw_currency.source.zone.pk if raw_currency.source and raw_currency.source.zone else None
+        source_id = raw_currency.source.pk if raw_currency.source else None
+
 
         if not official_currency_code: # Case: Delete alias
             aliases_deleted_count = 0
@@ -64,7 +68,7 @@ class ManageAliasView(View):
                 message_text_ui = f"Alias(es) pour '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' supprimé(s) avec succès."
                 log_details = (
                     f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
-                    f"a supprimé {aliases_deleted_count} alias pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom}, Date: {raw_currency.date_publication_brut})."
+                    f"a supprimé {aliases_deleted_count} alias pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom if raw_currency.source else 'N/A'}, Date: {raw_currency.date_publication_brut})."
                 )
                 action_type = "ALIAS_DELETED"
             else:
@@ -72,7 +76,7 @@ class ManageAliasView(View):
                 message_text_ui = "Aucun alias trouvé pour cette devise brute."
                 log_details = (
                     f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
-                    f"a tenté de supprimer un alias mais aucun n'a été trouvé pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom}, Date: {raw_currency.date_publication_brut})."
+                    f"a tenté de supprimer un alias mais aucun n'a été trouvé pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom if raw_currency.source else 'N/A'}, Date: {raw_currency.date_publication_brut})."
                 )
                 action_type = "ALIAS_MANAGEMENT_FAILED" # Indicate an attempt that didn't lead to a deletion, hence a form of failure.
                 log_level = 'warning'
@@ -88,13 +92,13 @@ class ManageAliasView(View):
             if raw_currency.code_iso_brut:
                 code_iso_upper = raw_currency.code_iso_brut.upper()
                 if code_iso_upper not in aliases_to_create_or_update:
-                    aliases_to_create_or_update.append(code_iso_upper)
+                    aliases_to_create_or_or_update.append(code_iso_upper)
             
             if not aliases_to_create_or_update:
                 message_text_ui = "Aucun identifiant brut valide pour créer un alias."
                 log_details = (
                     f"Échec de la gestion de l'alias par {request.session.get('email')} (ID: {request.session.get('user_id')}). "
-                    f"Aucun identifiant brut valide pour la devise scrappée '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom}, Date: {raw_currency.date_publication_brut})."
+                    f"Aucun identifiant brut valide pour la devise scrappée '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' (Source: {raw_currency.source.nom if raw_currency.source else 'N/A'}, Date: {raw_currency.date_publication_brut})."
                 )
                 log_level = 'warning'
                 
@@ -115,7 +119,9 @@ class ManageAliasView(View):
                     action=action_type,
                     details=log_details,
                     target_user_id=None,
-                    level=log_level
+                    level=log_level,
+                    zone_id=zone_id, # ADDED: Pass zone_id
+                    source_id=source_id # ADDED: Pass source_id
                 )
                 return response
 
@@ -140,7 +146,8 @@ class ManageAliasView(View):
             log_details = (
                 f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
                 f"a {('créé et/ou modifié' if created_aliases_count > 0 and updated_aliases_count > 0 else ('créé' if created_aliases_count > 0 else 'modifié'))} "
-                f"l'alias pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' vers la devise officielle '{official_currency.code}'."
+                f"l'alias pour la devise brute '{raw_currency.nom_devise_brut or raw_currency.code_iso_brut}' vers la devise officielle '{official_currency.code}' "
+                f"pour la source '{raw_currency.source.nom}' (ID: {raw_currency.source.pk}) dans la zone '{raw_currency.source.zone.nom}' (ID: {raw_currency.source.zone.pk})." # Added more details
             )
 
 
@@ -149,7 +156,9 @@ class ManageAliasView(View):
             action=action_type,
             details=log_details,
             target_user_id=None, # L'utilisateur cible n'est pas directement un user
-            level=log_level
+            level=log_level,
+            zone_id=zone_id, # ADDED: Pass zone_id
+            source_id=source_id # ADDED: Pass source_id
         )
         
         source = raw_currency.source

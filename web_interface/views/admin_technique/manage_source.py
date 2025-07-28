@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from core.models import ZoneMonetaire, Source, ScrapedCurrencyRaw
 from scrapers.tasks import run_scraper_for_source
-from logs.utils import log_action # Importation de log_action
+from logs.utils import log_action 
 
 def get_available_scrapers():
     try:
@@ -39,7 +39,6 @@ class ManageSourceView(View):
 
     def post(self, request, *args, **kwargs):
         if request.session.get("role") != "ADMIN_TECH":
-            # MODIFICATION : Log pour accès non autorisé
             log_action(
                 actor_id=request.session['user_id'],
                 action='UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -66,17 +65,17 @@ class ManageSourceView(View):
             response['HX-Retarget'] = '#modal'
             response['HX-Reswap'] = 'outerHTML'
             response['HX-Trigger'] = '{"showError": "' + error_message + '"}'
-            # MODIFICATION : Log pour échec de configuration de source
+            
             log_action(
                 actor_id=request.session['user_id'],
                 action='SOURCE_CONFIGURATION_FAILED',
                 details=f"Échec de la configuration de la source pour la zone '{zone.nom}' (ID: {zone.pk}) par {request.session.get('email')} (ID: {request.session.get('user_id')}). Erreur: {error_message}",
                 target_user_id=None,
-                level='warning'
+                level='warning',
+                zone_id=zone.pk # Pass zone_id
             )
             return response
 
-        # Déterminer si c'est une création ou une modification pour le log
         is_creation = not hasattr(zone, 'source')
         
         source, created = Source.objects.update_or_create(
@@ -84,7 +83,6 @@ class ManageSourceView(View):
             defaults={'nom': nom, 'url_source': url_source, 'scraper_filename': scraper_filename}
         )
         
-        # MODIFICATION : Message de log sémantique pour succès de configuration
         action_type = 'SOURCE_CONFIGURED' if is_creation else 'SOURCE_MODIFIED'
         log_details = (
             f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
@@ -97,7 +95,9 @@ class ManageSourceView(View):
             action=action_type,
             details=log_details,
             target_user_id=None,
-            level='info'
+            level='info',
+            zone_id=zone.pk, # Pass zone_id
+            source_id=source.pk # Pass source_id
         )
 
         run_scraper_for_source.delay(source.pk)

@@ -1,27 +1,25 @@
 # web_interface/views/superadmin/dashboard.py
 
 from django.shortcuts import render, redirect
+from django.http import HttpResponse 
+from django.template.loader import render_to_string 
 from core.models.zone_monetaire import ZoneMonetaire
 from users.models import CustomUser
 from logs.models import UINotification
 from .shared import get_refreshed_dashboard_context_and_html
-from django.http import HttpResponse
 
 def dashboard_view(request):
     user_role = request.session.get("role")
     if user_role != "SUPERADMIN":
-        # Redirection vers la page de login si le rôle n'est pas SUPERADMIN ou non authentifié.
-        # Cela devrait gérer le cas AnonymousUser pour la vue principale.
         return redirect("login")
 
-    # Récupérer tous les paramètres de filtre depuis la requête GET
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', 'all')
     zone_filter = request.GET.get('zone', 'all')
     role_filter = request.GET.get('role_filter', 'all')
 
-    # Appeler la fonction shared avec tous les paramètres
-    context, html_content = get_refreshed_dashboard_context_and_html(
+    # MODIFICATION : S'attendre à 2 valeurs seulement
+    context, html_dynamic_content = get_refreshed_dashboard_context_and_html(
         request,
         search_query=search_query,
         status_filter=status_filter,
@@ -29,17 +27,11 @@ def dashboard_view(request):
         role_filter=role_filter
     )
     
-    # MODIFICATION : Vérifier si l'utilisateur est authentifié avant de récupérer les notifications
-    unread_notifications = []
-    if request.user.is_authenticated: # AJOUT DE LA CONDITION
-        unread_notifications = UINotification.objects.filter(
-            user=request.user, 
-            is_read=False
-        ).order_by('-timestamp')[:10]
+    # Les notifications non lues sont déjà dans le contexte ici (ajoutées par shared.py)
+    # context['unread_notifications'] = ... (Cette ligne est gérée dans shared.py)
 
-    context['unread_notifications'] = unread_notifications
-    
     if request.headers.get('HX-Request'):
-        return HttpResponse(html_content)
+        # NE PAS FAIRE D'OOB SWAP POUR LES FILTRES ICI
+        return HttpResponse(html_dynamic_content)
 
     return render(request, "superadmin/dashboard.html", context)
