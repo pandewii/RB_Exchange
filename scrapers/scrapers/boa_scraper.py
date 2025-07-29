@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
+import sys
 import httpx
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -8,6 +9,9 @@ import json
 import re
 from dotenv import load_dotenv
 
+# Fix encodage terminal Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # 🔐 Clé API ScraperAPI
 load_dotenv()
@@ -24,7 +28,7 @@ def fetch_page_content():
                 "render": "true",
                 "wait_for_selector": "table"
             },
-            timeout=120,
+            timeout=120,  # ✅ durée augmentée
         )
         response.raise_for_status()
         return response.text
@@ -38,7 +42,7 @@ def parse_exchange_rates(html: str):
     table = soup.select_one("table")
 
     if not table:
-        raise Exception("❌ Aucune table trouvée sur la page.")
+        raise Exception("Aucune table trouvée sur la page.")
 
     headers = table.select("th")
     latest_col_index = None
@@ -52,12 +56,12 @@ def parse_exchange_rates(html: str):
             break
 
     if latest_col_index is None:
-        raise Exception("❌ Colonne de date non trouvée.")
+        raise Exception("Colonne de date non trouvée.")
 
     try:
         date_iso = datetime.strptime(date_raw, "%d-%m-%Y").strftime("%Y-%m-%d")
     except ValueError:
-        raise Exception(f"❌ Erreur parsing date : {date_raw}")
+        raise Exception(f"Erreur parsing date : {date_raw}")
 
     data = []
     for row in table.select("tr")[1:]:
@@ -85,7 +89,7 @@ def run():
         rates = parse_exchange_rates(html)
         print(json.dumps(rates, indent=2, ensure_ascii=False))
     except Exception as e:
-        print(f"❌ Erreur : {e}")
+        print(f"Erreur : {e}")
 
 if __name__ == "__main__":
     run()

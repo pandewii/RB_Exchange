@@ -4,8 +4,8 @@ from django.urls import path
 from .views.exchange_rates_view import ExchangeRatesView
 from .views.currency_convert_view import CurrencyConvertView
 from .views.my_zone_currencies_view import MyZoneCurrenciesView
-from .views.health_check_view import HealthCheckView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView # Pour l'authentification JWT
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView 
+
 
 urlpatterns = [
     # Authentification JWT
@@ -21,6 +21,6 @@ urlpatterns = [
     # 3. Liste des Devises Actives (Par Zone Implicite)
     path('my-zone-currencies/', MyZoneCurrenciesView.as_view(), name='my_zone_currencies'),
 
-    # 4. Vérification de la Santé de l'API
-    path('health/', HealthCheckView.as_view(), name='health_check'),
+
+  
 ]

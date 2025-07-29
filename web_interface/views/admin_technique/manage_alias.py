@@ -92,7 +92,7 @@ class ManageAliasView(View):
             if raw_currency.code_iso_brut:
                 code_iso_upper = raw_currency.code_iso_brut.upper()
                 if code_iso_upper not in aliases_to_create_or_update:
-                    aliases_to_create_or_or_update.append(code_iso_upper)
+                    aliases_to_create_or_update.append(code_iso_upper)
             
             if not aliases_to_create_or_update:
                 message_text_ui = "Aucun identifiant brut valide pour créer un alias."

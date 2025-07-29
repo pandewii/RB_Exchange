@@ -20,6 +20,15 @@
                     class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-xl shadow transition">
                     Supprimer la Source
                 </button>
+                {# NOUVEAU BOUTON : Exécuter Scraper Manuellement #}
+                <button
+                    hx-post="{% url 'admin_technique_execute_scraper' source_id=source.pk %}"
+                    hx-target="#source-details" {# Cibler ce même div pour une mise à jour visuelle si nécessaire #}
+                    hx-swap="none" {# Pas de remplacement de HTML, la notification suffit. La redirection est gérée par la vue si besoin. #}
+                    hx-confirm="Voulez-vous vraiment exécuter le scraper manuellement pour cette source ? Cela peut prendre un certain temps."
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow transition">
+                    Exécuter Scraper Manuellement
+                </button>
             </div>
         </div>
     {% else %}
