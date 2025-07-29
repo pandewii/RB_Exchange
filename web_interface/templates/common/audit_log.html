@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% csrf_token %} {# ADD THIS LINE HERE #}
 <div class="space-y-6">
     <h1 class="text-2xl font-semibold text-gray-800">Historique des Logs d'Audit</h1>
 
