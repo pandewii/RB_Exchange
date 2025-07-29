@@ -3,7 +3,15 @@
 {% block content %}
 {% csrf_token %}
 <div class="space-y-6">
-    <h1 class="text-2xl font-semibold text-gray-800">Tableau de Bord - Admin Zone {{ zone.nom }}</h1>
+    <h1 class="text-2xl font-semibold text-gray-800">Tableau de Bord - Admin Zone {% if zone %}{{ zone.nom }}{% else %}(Non assigné){% endif %}</h1>
+
+    {# Affichage d'un message d'erreur si l'Admin Zone n'est pas associé à une zone #}
+    {% if error_message %}
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+            <strong class="font-bold">Erreur :</strong>
+            <span class="block sm:inline">{{ error_message }}</span>
+        </div>
+    {% endif %}
 
     <div class="bg-white p-6 rounded-xl shadow">
         <h2 class="text-lg font-semibold text-gray-700 mb-4">Activation des Devises</h2>
@@ -18,65 +26,34 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for devise in all_devises %}
-                        {% include 'admin_zone/partials/_currency_row.html' %}
-                    {% endfor %}
+                    {% if all_devises %}
+                        {% for devise in all_devises %}
+                            {% include 'admin_zone/partials/_currency_row.html' %}
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-gray-500">
+                                {% if zone %}
+                                    Aucune devise pertinente trouvée pour votre zone ou sa source n'est pas configurée.
+                                {% else %}
+                                    Veuillez d'abord être assigné à une zone.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
     </div>
 
-    {# NOUVEL AJOUT : Affichage des notifications UI, maintenant en dessous des tableaux métiers #}
-    <div id="ui-notifications-container" class="bg-white p-6 rounded-xl shadow mt-6"> {# Ajout de mt-6 pour espacement #}
-        <h2 class="text-lg font-semibold text-gray-700 mb-4">Notifications Importantes</h2>
-        {% if unread_notifications %}
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm text-left text-gray-700">
-                    <thead class="text-xs uppercase text-gray-600 border-b">
-                        <tr>
-                            <th class="py-2 px-4">Timestamp</th>
-                            <th class="py-2 px-4">Message</th>
-                            <th class="py-2 px-4">Niveau</th>
-                            <th class="py-2 px-4">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for notification in unread_notifications %}
-                        <tr class="border-t hover:bg-gray-50 {% if notification.level == 'error' %}bg-red-50{% elif notification.level == 'warning' %}bg-yellow-50{% endif %}">
-                            <td class="py-2 px-4 text-xs text-gray-500">{{ notification.timestamp|date:"d/m/Y H:i:s" }}</td>
-                            <td class="py-2 px-4 text-sm">{{ notification.message }}</td>
-                            <td class="py-2 px-4">
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full
-                                    {% if notification.level == 'error' %}bg-red-100 text-red-800
-                                    {% elif notification.level == 'warning' %}bg-yellow-100 text-yellow-800
-                                    {% elif notification.level == 'critical' %}bg-purple-100 text-purple-800
-                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                    {{ notification.level|capfirst }}
-                                </span>
-                            </td>
-                            <td class="py-2 px-4">
-                                <button hx-post="{% url 'mark_notification_read' pk=notification.pk %}"
-                                        hx-target="#ui-notifications-container"
-                                        hx-swap="outerHTML"
-                                        class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded-xl text-xs">
-                                    Marquer lu
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-4 text-center">
-                <a href="{% url 'audit_logs' %}" class="text-sm text-blue-600 hover:underline">Voir tous les logs d'audit</a>
-            </div>
-        {% else %}
-            <p class="text-gray-500 text-center py-4">Aucune notification non lue pour le moment.</p>
-            <div class="mt-4 text-center">
-                <a href="{% url 'audit_logs' %}" class="text-sm text-blue-600 hover:underline">Voir tous les logs d'audit</a>
-            </div>
-        {% endif %}
+    {# Nouveau bloc simplifié pour le lien vers les logs d'audit, situé après la table principale #}
+    <div class="bg-white p-6 rounded-xl shadow mt-6 text-center">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Logs du Système</h2>
+        <p class="text-gray-500 py-4">Pour consulter tous les logs d'audit du système :</p>
+        <a href="{% url 'audit_logs' %}" class="text-sm text-blue-600 hover:underline">Voir tous les logs d'audit</a>
     </div>
+
+    {# ANCIENNE SECTION : Derniers Logs Critiques/Erreurs pour l'Admin Zone - SUPPRIMÉE #}
 
 </div>
 

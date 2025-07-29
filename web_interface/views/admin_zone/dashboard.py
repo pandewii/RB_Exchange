@@ -3,8 +3,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from core.models import Devise, ActivatedCurrency, ZoneMonetaire, ScrapedCurrencyRaw, DeviseAlias # NOUVEL AJOUT: ScrapedCurrencyRaw, DeviseAlias
 from users.models import CustomUser
-from logs.models import UINotification
+from logs.models import UINotification, LogEntry # NOUVEAU: Importer LogEntry
 from django.http import HttpResponse
+from django.db.models import Q # NOUVEAU: Importer Q pour les requêtes complexes
 
 def dashboard_view(request):
     user_role = request.session.get("role")
@@ -15,12 +16,21 @@ def dashboard_view(request):
 
     admin_zone_user = get_object_or_404(CustomUser, pk=user_id)
     if not admin_zone_user.zone:
+        # AJOUT: Gérer les notifications UI si l'Admin Zone n'est pas assigné à une zone
+        unread_notifications = []
+        if request.user.is_authenticated:
+            unread_notifications = UINotification.objects.filter(
+                user=request.user,
+                is_read=False
+            ).order_by('-timestamp')[:10]
+            
         return render(request, "admin_zone/dashboard.html", {
             "zone": None,
             "error_message": "Votre compte Admin Zone n'est pas associé à une zone monétaire.",
             "all_devises": [],
             "active_codes": set(),
-            "unread_notifications": []
+            "unread_notifications": unread_notifications, # Inclure les notifications
+            "critical_errors_logs": [] # Pas de logs d'erreurs si pas de zone
         })
 
     zone = admin_zone_user.zone
@@ -65,10 +75,27 @@ def dashboard_view(request):
             is_read=False
         ).order_by('-timestamp')[:10]
 
+    # AJOUT : Récupération des 5 derniers logs critiques/erreurs/warnings pertinents pour ADMIN_ZONE
+    critical_errors_logs = []
+    if request.user.is_authenticated:
+        # Logs pertinents pour l'Admin Zone : actions sur les devises de sa zone, ou échecs de pipeline liés à sa source
+        critical_errors_logs = LogEntry.objects.filter(
+            Q(level__in=['error', 'critical', 'warning']) &
+            (
+                # Logs où l'Admin Zone est l'acteur ou l'impersonateur
+                Q(actor=request.user) |
+                Q(impersonator=request.user) |
+                # Logs d'erreurs/warnings sur l'activation de devises pour sa zone (via zone_id dans le log)
+                Q(zone_id=zone.pk) # Tous les logs avec cette zone_id
+            )
+        ).order_by('-timestamp')[:5]
+
+
     context = {
         "zone": zone,
         "all_devises": relevant_devises, # MODIFIÉ
         "active_codes": active_codes,
         "unread_notifications": unread_notifications,
+        "critical_errors_logs": critical_errors_logs, # AJOUT: logs d'erreurs critiques
     }
     return render(request, "admin_zone/dashboard.html", context)

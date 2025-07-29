@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 from core.models import ZoneMonetaire, Source, ScrapedCurrencyRaw
 from scrapers.tasks import run_scraper_for_source
 from logs.utils import log_action 
+from users.models import CustomUser # Importation nécessaire pour CustomUser
 
 def get_available_scrapers():
     try:
@@ -38,11 +39,29 @@ class ManageSourceView(View):
         return render(request, "admin_technique/partials/form_manage_source.html", context)
 
     def post(self, request, *args, **kwargs):
+        # Début de la logique pour la gestion de l'impersonation pour le log
+        current_active_user_id = request.session.get('user_id')
+        current_active_user = get_object_or_404(CustomUser, pk=current_active_user_id)
+
+        actor_id_for_log = current_active_user_id 
+        impersonator_id_for_log = None 
+
+        if 'impersonation_stack' in request.session and request.session['impersonation_stack']:
+            actor_id_for_log = request.session['impersonation_stack'][0]['user_id']
+            impersonator_id_for_log = request.session['impersonation_stack'][-1]['user_id']
+        
+        root_actor_obj = get_object_or_404(CustomUser, pk=actor_id_for_log)
+        impersonator_obj = None
+        if impersonator_id_for_log:
+            impersonator_obj = get_object_or_404(CustomUser, pk=impersonator_id_for_log)
+        # Fin de la logique pour la gestion de l'impersonation pour le log
+
         if request.session.get("role") != "ADMIN_TECH":
             log_action(
-                actor_id=request.session['user_id'],
+                actor_id=actor_id_for_log, # Utilisation de l'acteur corrigé
+                impersonator_id=impersonator_id_for_log, # Utilisation de l'impersonateur corrigé
                 action='UNAUTHORIZED_ACCESS_ATTEMPT',
-                details=f"Accès non autorisé pour gérer une source par {request.session.get('email')} (ID: {request.session.get('user_id')}). Rôle insuffisant.",
+                details=f"Accès non autorisé pour gérer une source par {current_active_user.email} (ID: {current_active_user.pk}). Rôle insuffisant.", # Message mis à jour pour current_active_user
                 level='warning'
             )
             return HttpResponse("Accès non autorisé.", status=403)
@@ -67,12 +86,13 @@ class ManageSourceView(View):
             response['HX-Trigger'] = '{"showError": "' + error_message + '"}'
             
             log_action(
-                actor_id=request.session['user_id'],
+                actor_id=actor_id_for_log, # Utilisation de l'acteur corrigé
+                impersonator_id=impersonator_id_for_log, # Utilisation de l'impersonateur corrigé
                 action='SOURCE_CONFIGURATION_FAILED',
-                details=f"Échec de la configuration de la source pour la zone '{zone.nom}' (ID: {zone.pk}) par {request.session.get('email')} (ID: {request.session.get('user_id')}). Erreur: {error_message}",
+                details=f"Échec de la configuration de la source pour la zone '{zone.nom}' (ID: {zone.pk}) par {current_active_user.email} (ID: {current_active_user.pk}). Erreur: {error_message}", # Message mis à jour
                 target_user_id=None,
                 level='warning',
-                zone_id=zone.pk # Pass zone_id
+                zone_id=zone.pk 
             )
             return response
 
@@ -84,20 +104,31 @@ class ManageSourceView(View):
         )
         
         action_type = 'SOURCE_CONFIGURED' if is_creation else 'SOURCE_MODIFIED'
+        
+        # Construction du préfixe de détails avec gestion de l'impersonation
+        details_prefix = f"L'administrateur {root_actor_obj.email} (ID: {root_actor_obj.pk}, Rôle: {root_actor_obj.get_role_display()})"
+        if impersonator_obj:
+            details_prefix += f" (agissant via {impersonator_obj.email} (ID: {impersonator_obj.pk}, Rôle: {impersonator_obj.get_role_display()}))"
+            # Si l'acteur racine est différent de l'utilisateur effectif actuel (celui dont la session est active)
+            if root_actor_obj.pk != current_active_user.pk: 
+                 details_prefix += f" et exécuté par {current_active_user.email} (ID: {current_active_user.pk}, Rôle: {current_active_user.get_role_display()})"
+        else: # Pas d'impersonation, donc l'acteur racine est l'utilisateur actif actuel
+            details_prefix = f"L'administrateur {current_active_user.email} (ID: {current_active_user.pk}, Rôle: {current_active_user.get_role_display()})"
+
         log_details = (
-            f"L'administrateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) "
-            f"{'a configuré' if is_creation else 'a modifié'} la source '{source.nom}' (ID: {source.pk}) pour la zone '{zone.nom}' (ID: {zone.pk}). "
+            f"{details_prefix} {'a configuré' if is_creation else 'a modifié'} la source '{source.nom}' (ID: {source.pk}) pour la zone '{zone.nom}' (ID: {zone.pk}). "
             f"Fichier scraper: {source.scraper_filename}, URL: {source.url_source}."
         )
 
         log_action(
-            actor_id=request.session['user_id'],
+            actor_id=actor_id_for_log, # Utilisation de l'acteur corrigé
+            impersonator_id=impersonator_id_for_log, # Utilisation de l'impersonateur corrigé
             action=action_type,
             details=log_details,
             target_user_id=None,
             level='info',
-            zone_id=zone.pk, # Pass zone_id
-            source_id=source.pk # Pass source_id
+            zone_id=zone.pk, 
+            source_id=source.pk 
         )
 
         run_scraper_for_source.delay(source.pk)

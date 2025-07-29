@@ -1,0 +1,88 @@
+{# web_interface/templates/common/_audit_log_table.html #}
+{# Ce partial est chargé par HTMX et contient uniquement la table des logs et la pagination. #}
+
+<div id="audit-log-content"> {# L'ID est important pour le hx-target #}
+    <table class="min-w-full text-sm text-left text-gray-700">
+        <thead class="text-xs uppercase text-gray-600 border-b">
+            <tr>
+                <th class="py-2 px-4">Timestamp</th>
+                <th class="py-2 px-4">Action</th>
+                <th class="py-2 px-4">Acteur</th>
+                <th class="py-2 px-4">Agissait comme</th>
+                <th class="py-2 px-4">Cible</th>
+                <th class="py-2 px-4">Détails</th>
+                <th class="py-2 px-4">Niveau</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr class="border-t hover:bg-gray-50">
+                <td class="py-2 px-4 text-xs text-gray-500">{{ log.timestamp|date:"d/m/Y H:i:s" }}</td>
+                <td class="py-2 px-4 font-semibold">{{ log.action }}</td>
+                <td class="py-2 px-4">
+                    {% if log.actor %}
+                        {{ log.actor.email }}
+                    {% else %}
+                        Système
+                    {% endif %}
+                </td>
+                <td class="py-2 px-4">
+                    {% if log.impersonator %}
+                        {{ log.impersonator.email }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="py-2 px-4">
+                    {% if log.target_user %}
+                        {{ log.target_user.email }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="py-2 px-4 text-sm text-gray-700">{{ log.details }}</td>
+                <td class="py-2 px-4">
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full
+                        {% if log.level == 'error' %}bg-red-100 text-red-800
+                        {% elif log.level == 'warning' %}bg-yellow-100 text-yellow-800
+                        {% elif log.level == 'critical' %}bg-purple-100 text-purple-800
+                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ log.level|capfirst }}
+                    </span>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="text-center py-4 text-gray-500">Aucun log trouvé.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# Pagination Controls #}
+    <div class="mt-4 flex justify-between items-center text-sm text-gray-700">
+        <div>
+            Page {{ logs.number }} sur {{ logs.paginator.num_pages }}.
+            Total: {{ logs.paginator.count }} logs.
+        </div>
+        <div>
+            {# Les paramètres de requête pour la pagination avec SEULEMENT 'q' #}
+            {% with current_params='&q='|add:search_query %}
+                {% if logs.has_previous %}
+                    <button hx-get="{% url 'audit_logs' %}?page={{ logs.previous_page_number }}{{ current_params }}"
+                            hx-target="#audit-log-content" hx-swap="outerHTML" {# Remplace SEULEMENT ce div #}
+                            class="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300">
+                        Précédent
+                    </button>
+                {% endif %}
+                {% if logs.has_next %}
+                    <button hx-get="{% url 'audit_logs' %}?page={{ logs.next_page_number }}{{ current_params }}"
+                            hx-target="#audit-log-content" hx-swap="outerHTML" {# Remplace SEULEMENT ce div #}
+                            class="px-3 py-1 ml-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                        Suivant
+                    </button>
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+</div>

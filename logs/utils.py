@@ -37,7 +37,7 @@ def log_action(actor_id, action, details, impersonator_id=None, target_user_id=N
             print(f"Warning: Target user with ID {target_user_id} not found for log_action. Log will proceed without target user.", file=sys.stderr)
             pass # Continuer sans utilisateur cible si non trouvé
 
-    # Créer l'entrée de log principale
+    # Créer l'entrée de log principale (TOUJOURS créée)
     log_entry = LogEntry.objects.create(
         actor=actor,
         impersonator=impersonator,
@@ -45,100 +45,114 @@ def log_action(actor_id, action, details, impersonator_id=None, target_user_id=N
         action=action,
         details=details, # Utilise le message 'details' déjà enrichi
         level=level,
+        # IMPORTANT: Si vous avez ajouté zone_id, currency_code, source_id
+        # comme champs directs dans le modèle LogEntry, ils devraient être passés ici.
+        # Pour l'instant, ils sont utilisés pour le ciblage des notifications.
     )
 
     # --- LOGIQUE DE NOTIFICATION UI AFFINÉE ---
-    
-    # Seuls les logs de niveau 'warning', 'error', 'critical' sont des candidats pour les notifications UI
-    if level not in ['warning', 'error', 'critical', 'info']: # Inclure 'info' si certaines notifications info sont désirées
-        return # Pas de notification UI pour les logs info ou autres niveaux non définis
-
+    # Déterminer si une notification UI doit être générée et pour qui.
     dest_user_ids = set() # Utiliser un set pour éviter les doublons (ID utilisateur)
 
     # Pré-charger les PKs des SuperAdmins et Admin Techs actifs pour des recherches rapides
     superadmins_active_pks = set(CustomUser.objects.filter(role='SUPERADMIN', is_active=True).values_list('pk', flat=True))
     admin_techs_active_pks = set(CustomUser.objects.filter(role='ADMIN_TECH', is_active=True).values_list('pk', flat=True))
     
-    # 1. Notifications pour les problèmes d'Accès & Sécurité
-    if action in [
-        "UNAUTHORIZED_ACCESS_ATTEMPT",
-        "UNAUTHORIZED_DASHBOARD_ACCESS",
-        "USER_LOGIN_FAILED_API",
-        "USER_NOT_FOUND"
-    ]:
-        dest_user_ids.update(superadmins_active_pks)
-        dest_user_ids.update(admin_techs_active_pks) # Admin Techs sont aussi concernés par la sécurité système
+    # --- Règles de génération des notifications ---
 
-    # 2. Notifications pour la gestion des Zones & Sources & Planifications & Alias
-    # Ces actions concernent les SuperAdmins et les Admin Techs (gardien de l'infrastructure)
-    elif action in [
-        "ZONE_DELETION_FAILED", "ZONE_DELETED", "ZONE_STATUS_TOGGLED", "ZONE_CREATED", "ZONE_PROPERTIES_UPDATED",
-        "SOURCE_CONFIGURED", "SOURCE_MODIFIED", "SOURCE_DELETED", "SOURCE_CONFIGURATION_FAILED",
-        "SCRAPER_SCRIPT_NOT_FOUND", "SCRAPER_DIR_NOT_FOUND", "SCRAPER_LISTING_FAILED",
-        "SCHEDULE_MANAGEMENT_FAILED", "SCHEDULE_CREATED", "SCHEDULE_MODIFIED", "SCHEDULE_DELETED",
-        "ALIAS_CREATED", "ALIAS_MODIFIED", "ALIAS_DELETED", "ALIAS_MANAGEMENT_FAILED",
-    ]:
+    # Règle 1: Les logs de niveau 'warning', 'error', 'critical' génèrent TOUJOURS une notification UI
+    if level in ['warning', 'error', 'critical']:
         dest_user_ids.update(superadmins_active_pks)
-        dest_user_ids.update(admin_techs_active_pks)
+        dest_user_ids.update(admin_techs_active_pks) 
         
-        # Si l'action a un contexte de zone, notifier les AdminTechs spécifiques à cette zone
+        # Si l'erreur/warning est liée à une zone, notifier les AdminZones concernés
         if zone_id:
-            admin_techs_in_zone = CustomUser.objects.filter(role='ADMIN_TECH', zone__pk=zone_id, is_active=True).values_list('pk', flat=True)
-            dest_user_ids.update(admin_techs_in_zone)
-
-    # 3. Notifications pour l'Exécution des Scrapers & Pipeline (Automatisé)
-    # Erreurs critiques pour les SuperAdmins et Admin Techs
-    elif action in [
-        "SCRAPER_TIMEOUT", "SCRAPER_EXECUTION_ERROR", "SCRAPER_INVALID_JSON", "SCRAPER_UNEXPECTED_ERROR",
-        "RAW_DATA_DATE_PARSE_ERROR", "RAW_DATA_VALUE_PARSE_ERROR", "PIPELINE_CALCULATION_ERROR",
-        "PIPELINE_ERROR", "PIPELINE_UNEXPECTED_ERROR_START"
-    ]:
-        dest_user_ids.update(superadmins_active_pks)
-        dest_user_ids.update(admin_techs_active_pks)
+            dest_user_ids.update(CustomUser.objects.filter(role='ADMIN_ZONE', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
         
-        if zone_id: # Pour cibler les Admin Techs d'une zone spécifique en cas d'erreur scraper/pipeline
-            admin_techs_in_zone = CustomUser.objects.filter(role='ADMIN_TECH', zone__pk=zone_id, is_active=True).values_list('pk', flat=True)
-            dest_user_ids.update(admin_techs_in_zone)
+        # Notifier l'acteur, l'impersonateur, ou la cible si c'est un ADMIN_ZONE ou WS_USER et qu'ils ne sont pas déjà inclus
+        if actor and actor.is_active and actor.pk not in dest_user_ids and actor.role in ['ADMIN_ZONE', 'WS_USER']:
+            dest_user_ids.add(actor.pk)
+        if impersonator and impersonator.is_active and impersonator.pk not in dest_user_ids and impersonator.role in ['ADMIN_ZONE', 'WS_USER']:
+            dest_user_ids.add(impersonator.pk)
+        if target_user and target_user.is_active and target_user.pk not in dest_user_ids and target_user.role in ['ADMIN_ZONE', 'WS_USER']:
+            dest_user_ids.add(target_user.pk)
 
-    # 4. Notifications pour la Gestion des Devises Activées (par Admin Zone)
-    # C'est la responsabilité de l'Admin Zone, donc il est le destinataire principal avec les SuperAdmins
-    elif action == "CURRENCY_ACTIVATION_TOGGLED":
-        dest_user_ids.update(superadmins_active_pks) # SuperAdmins toujours informés
-        
-        # Admin Zones de la zone concernée
-        if zone_id:
-            admin_zones_in_zone = CustomUser.objects.filter(role='ADMIN_ZONE', zone__pk=zone_id, is_active=True).values_list('pk', flat=True)
-            dest_user_ids.update(admin_zones_in_zone)
-        # ADMIN_TECHs NE SONT PLUS NOTIFIÉS PAR DÉFAUT POUR CETTE ACTION.
-        # Si un AdminTech doit être notifié, cela doit être via son rôle d'AdminZone de la même zone.
-
-    # 5. Notifications pour les actions utilisateur (création/modification/suppression/statut/impersonation)
+    # Règle 2: Les logs de niveau 'info' génèrent des notifications UI UNIQUEMENT pour des actions spécifiques.
+    # Ces actions sont celles qui représentent un changement important d'état pour les admins.
+    # Les logs de type "FAILED" (qui affichent déjà des erreurs UI) sont exclus pour éviter la redondance.
     elif action in [
         "ADMIN_CREATED", "CONSUMER_CREATED", "USER_MODIFIED", "USER_DELETED", "USER_STATUS_TOGGLED",
-        "SUPERADMIN_MODIFICATION_ATTEMPT", "SUPERADMIN_DELETION_FAILED", "SUPERADMIN_STATUS_TOGGLE_ATTEMPT",
-        "USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION"
+        "USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION", "ZONE_CREATED", "ZONE_DELETED",
+        "ZONE_STATUS_TOGGLED", "ZONE_PROPERTIES_UPDATED", "SOURCE_CONFIGURED", "SOURCE_MODIFIED",
+        "SOURCE_DELETED", "SCHEDULE_CREATED", "SCHEDULE_MODIFIED", "SCHEDULE_DELETED",
+        "ALIAS_CREATED", "ALIAS_MODIFIED", "ALIAS_DELETED", "CURRENCY_ACTIVATION_TOGGLED",
+        # Actions système importantes qui ne sont pas des erreurs mais des infos critiques (si pertinent)
+        "SCRAPER_TIMEOUT", "SCRAPER_EXECUTION_ERROR", "SCRAPER_INVALID_JSON", "SCRAPER_UNEXPECTED_ERROR", # Ces-ci sont des erreurs, mais étaient niveau info dans l'ancienne logique
+        "RAW_DATA_DATE_PARSE_ERROR", "RAW_DATA_VALUE_PARSE_ERROR", "PIPELINE_CALCULATION_ERROR",
+        "PIPELINE_ERROR", "PIPELINE_UNEXPECTED_ERROR_START",
     ]:
-        dest_user_ids.update(superadmins_active_pks) # SuperAdmins toujours notifiés des actions sur les utilisateurs
-        
-        # L'acteur lui-même est notifié de ses propres actions importantes
-        if actor and actor.is_active:
-            dest_user_ids.add(actor.pk)
-        
-        # Si un ADMIN_TECH agit sur un utilisateur, il est notifié.
-        # Si la cible est un ADMIN_TECH/ADMIN_ZONE, il doit être notifié par le SuperAdmin
-        if target_user and target_user.is_active and action not in ["USER_DELETED"]:
-             if target_user.role == 'ADMIN_TECH' :
-                 dest_user_ids.add(target_user.pk)
-             if target_user.role == 'ADMIN_ZONE':
-                 dest_user_ids.add(target_user.pk)
+        # Par défaut, les SuperAdmins et Admin Techs sont informés de ces actions
+        dest_user_ids.update(superadmins_active_pks)
+        dest_user_ids.update(admin_techs_active_pks)
 
+        # Ciblage plus précis pour les actions spécifiques:
+        # Actions concernant les Zones, Sources, Schedules, Alias (affectant infrastructure ou zone spécifique)
+        if action in [
+            "ZONE_CREATED", "ZONE_DELETED", "ZONE_STATUS_TOGGLED", "ZONE_PROPERTIES_UPDATED", 
+            "SOURCE_CONFIGURED", "SOURCE_MODIFIED", "SOURCE_DELETED", 
+            "SCHEDULE_CREATED", "SCHEDULE_MODIFIED", "SCHEDULE_DELETED",
+            "ALIAS_CREATED", "ALIAS_MODIFIED", "ALIAS_DELETED"
+        ]:
+            if zone_id:
+                # Notifier les Admin Zones de cette zone
+                dest_user_ids.update(CustomUser.objects.filter(role='ADMIN_ZONE', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
+                # Notifier les WS_USER de cette zone (si pertinent, ex: alias impacte leur accès)
+                # Décision: Pour l'instant, les WS_USER ne reçoivent pas de notifications UI automatiques pour ces actions.
+                # dest_user_ids.update(CustomUser.objects.filter(role='WS_USER', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
+        
+        # Actions liées au scraping et pipeline (erreurs système, généralement pour Admin Tech / SuperAdmin)
+        elif action in [
+            "SCRAPER_TIMEOUT", "SCRAPER_EXECUTION_ERROR", "SCRAPER_INVALID_JSON", "SCRAPER_UNEXPECTED_ERROR",
+            "RAW_DATA_DATE_PARSE_ERROR", "RAW_DATA_VALUE_PARSE_ERROR", "PIPELINE_CALCULATION_ERROR",
+            "PIPELINE_ERROR", "PIPELINE_UNEXPECTED_ERROR_START"
+        ]:
+            if zone_id: # Si l'erreur pipeline est liée à une zone spécifique
+                dest_user_ids.update(CustomUser.objects.filter(role='ADMIN_ZONE', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
 
-    # Cas des actions qui ne génèrent PAS de notification UI (selon votre spécification)
-    elif action in [
-        "ADMIN_CREATION_FAILED", "CONSUMER_CREATION_FAILED", "USER_MODIFICATION_FAILED",
-        "CURRENCY_TOGGLE_FAILED_NO_ZONE", "ZONE_PROPERTIES_UPDATE_FAILED", "ZONE_CREATION_FAILED"
-    ]:
-        return # Pas de notification UI pour ces actions, l'erreur est déjà visible UI.
+        # Actions de gestion de devises activées (Admin Zone)
+        elif action == "CURRENCY_ACTIVATION_TOGGLED":
+            if zone_id:
+                # Notifier les Admin Zones de cette zone
+                dest_user_ids.update(CustomUser.objects.filter(role='ADMIN_ZONE', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
+                # Notifier les WS_USER de cette zone (si pertinent pour leur accès aux taux)
+                dest_user_ids.update(CustomUser.objects.filter(role='WS_USER', zone__pk=zone_id, is_active=True).values_list('pk', flat=True))
+        
+        # Actions utilisateur (création/modification/suppression/statut/impersonation)
+        elif action in [
+            "ADMIN_CREATED", "CONSUMER_CREATED", "USER_MODIFIED", "USER_DELETED", "USER_STATUS_TOGGLED",
+            "USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION"
+        ]:
+            # L'acteur lui-même (s'il est un admin) est notifié de ses propres actions importantes
+            if actor and actor.is_active:
+                dest_user_ids.add(actor.pk)
+            
+            # Si la cible est un ADMIN_TECH/ADMIN_ZONE/WS_USER, il doit être notifié
+            if target_user and target_user.is_active and action not in ["USER_DELETED"]:
+                if target_user.role in ['ADMIN_TECH', 'ADMIN_ZONE', 'WS_USER']:
+                    dest_user_ids.add(target_user.pk)
+            
+            # Les Admin Techs/Admin Zones sont notifiés des impersonations (hors leur propre impersonation)
+            if action in ["USER_IMPERSONATED", "USER_REVERTED_IMPERSONATION"]:
+                # Notifier les ADMIN_TECHs et ADMIN_ZONEs (sauf s'ils sont l'acteur ou la cible)
+                all_admin_pks = set(CustomUser.objects.filter(Q(role='ADMIN_TECH') | Q(role='ADMIN_ZONE'), is_active=True).values_list('pk', flat=True))
+                if actor: all_admin_pks.discard(actor.pk)
+                if target_user: all_admin_pks.discard(target_user.pk)
+                if impersonator: all_admin_pks.discard(impersonator.pk) # Notifier l'impersonateur s'il revient
+                dest_user_ids.update(all_admin_pks)
+
+    else: # Pour les logs de niveau 'info' qui ne sont pas dans la liste des actions spécifiques ci-dessus (ex: API_ACCESS_...)
+        # Ou les logs 'FAILED' qui ont déjà affiché une erreur UI
+        return # Pas de notification UI pour ces actions, l'erreur est déjà visible UI ou c'est un log de détail non-critique.
 
 
     # Créer les notifications pour chaque destinataire unique
