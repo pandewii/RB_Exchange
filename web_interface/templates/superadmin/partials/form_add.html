@@ -4,7 +4,7 @@
 
         <form method="post" 
               hx-post="{% url 'superadmin_add_admin_view' %}" 
-              hx-target="#dashboard-dynamic-content" 
+              hx-target="#dashboard-main-content-container" {# CHANGED #}
               hx-swap="innerHTML">
             {% csrf_token %}
 

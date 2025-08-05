@@ -1,4 +1,12 @@
-<table class="w-full text-sm text-left text-gray-700">
+<table class="w-full text-sm text-left text-gray-700 table-fixed"> {# ADDED table-fixed class here #}
+    <colgroup>
+        {# Adjust these widths as needed to fit your content and ensure symmetry #}
+        <col style="width: 15%;"> {# Nom d'utilisateur #}
+        <col style="width: 25%;"> {# Email #}
+        <col style="width: 15%;"> {# Rôle #}
+        <col style="width: 15%;"> {# Zone #}
+        <col style="width: 30%;"> {# Actions (remaining width) #}
+    </colgroup>
     <thead class="text-xs uppercase text-gray-600 border-b">
         <tr>
             <th class="py-2">Nom d'utilisateur</th>
@@ -11,8 +19,8 @@
     <tbody>
         {% for user in users %}
         <tr class="border-t">
-            <td class="py-2">{{ user.username }}</td>
-            <td class="py-2">{{ user.email }}</td>
+            <td class="py-2 overflow-hidden text-ellipsis whitespace-nowrap">{{ user.username }}</td> {# Added overflow handling #}
+            <td class="py-2 overflow-hidden text-ellipsis whitespace-nowrap">{{ user.email }}</td>   {# Added overflow handling #}
             <td class="py-2">
                 <span class="px-2 py-1 rounded-full text-xs font-semibold
                     {% if user.role == 'ADMIN_TECH' %}bg-gray-200 text-gray-800
@@ -22,7 +30,7 @@
                     {{ user.get_role_display }}
                 </span>
             </td>
-            <td class="py-2">
+            <td class="py-2 overflow-hidden text-ellipsis whitespace-nowrap"> {# Added overflow handling #}
                 {% if user.zone %}
                     {{ user.zone.nom }}
                 {% else %}
@@ -30,10 +38,10 @@
                 {% endif %}
             </td>
             <td class="py-2 flex flex-wrap gap-2">
-                {# Boutons existants #}
+                {# Buttons #}
                 <button
                     hx-post="{% url 'superadmin_toggle_admin' pk=user.pk %}"
-                    hx-target="#dashboard-dynamic-content"
+                    hx-target="#dashboard-main-content-container"
                     hx-swap="innerHTML"
                     class="{% if user.is_active %}bg-yellow-500 hover:bg-yellow-600{% else %}bg-green-500 hover:bg-green-600{% endif %} text-white px-3 py-1 rounded-xl text-xs">
                     {% if user.is_active %}Désactiver{% else %}Activer{% endif %}
@@ -53,10 +61,12 @@
                     Supprimer
                 </button>
 
-                {# Bouton Impersonner pour ADMIN_TECH ou ADMIN_ZONE #}
+                {# Impersonate button #}
                 {% if current_user_role == 'SUPERADMIN' and user.role == 'ADMIN_TECH' or current_user_role == 'SUPERADMIN' and user.role == 'ADMIN_ZONE' %}
                     <button
                         hx-post="{% url 'impersonate_user' user_id=user.pk %}"
+                        hx-swap="none"
+                        hx-include="[name='csrfmiddlewaretoken']"
                         class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-xl text-xs"
                         hx-confirm="Voulez-vous vraiment impersonner {{ user.email }} ({{ user.get_role_display }}) ?">
                         Impersonner

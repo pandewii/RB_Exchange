@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <title>RB Exchange - La Rose Blanche</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {# Retour aux CDNs pour Tailwind CSS et HTMX #}
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.2"></script>
 </head>
@@ -20,19 +19,21 @@
 
     <header class="bg-[#a6183b] text-white p-4 shadow">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="{% if request.session.role == 'SUPERADMIN' %}{% url 'superadmin_dashboard' %}{% elif request.session.role == 'ADMIN_TECH' %}{% url 'admin_technique_dashboard' %}{% elif request.session.role == 'ADMIN_ZONE' %}{% url 'admin_zone_dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="flex items-center gap-3">
+            {# Use request.user for dashboard links #}
+            <a href="{% if request.user.is_authenticated and request.user.role == 'SUPERADMIN' %}{% url 'superadmin_dashboard' %}{% elif request.user.is_authenticated and request.user.role == 'ADMIN_TECH' %}{% url 'admin_technique_dashboard' %}{% elif request.user.is_authenticated and request.user.role == 'ADMIN_ZONE' %}{% url 'admin_zone_dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="flex items-center gap-3">
                 <img src="{% static 'img/img.png' %}" alt="Logo La Rose Blanche" class="h-10 w-auto">
                 <span class="text-lg font-semibold">RB_Exchange</span>
             </a>
-            {% if request.session.user_id %}
+            {# Protect UI elements from WS_USER and unauthenticated users #}
+            {% if request.user.is_authenticated and request.user.role != "WS_USER" %}
                 <div class="flex items-center gap-6">
-                    {# NOUVELLE CONDITION POUR LE BOUTON REVERT : Vérifier si la pile d'impersonation n'est PAS vide #}
                     {% if request.session.impersonation_stack %}
                         <div class="bg-blue-700 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2">
-                            Impersonation de {{ request.session.email }}
+                            Impersonation de {{ request.session.email }} 
                             <button 
                                 hx-post="{% url 'revert_impersonation' %}" 
-                                hx-swap="none" {# La redirection est gérée par HX-Redirect dans la vue Python #}
+                                hx-swap="none" 
+                                hx-include="[name='csrfmiddlewaretoken']" 
                                 class="ml-2 text-white hover:text-blue-200" 
                                 title="Revenir à votre rôle original">
                                 &times; Revenir
@@ -41,7 +42,7 @@
                     {% endif %}
 
                     <div class="text-right">
-                        <p class="text-sm font-medium">{{ request.session.email }}</p>
+                        <p class="text-sm font-medium">{{ request.user.email }}</p> {# Use request.user.email #}
                         <p class="text-xs text-red-200">{% now "j F Y, H:i" %}</p>
                     </div>
                     <a href="{% url 'logout' %}" class="bg-[#e61a3d] hover:bg-[#de193f] text-white px-4 py-2 rounded-lg text-sm font-medium transition">
@@ -104,8 +105,6 @@
 
         showNotification(message, 'info');
         });
-
-
 
 
         document.body.addEventListener('showError', (evt) => {

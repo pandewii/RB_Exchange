@@ -1,37 +1,40 @@
-# web_interface/views/superadmin/dashboard.py
-
 from django.shortcuts import render, redirect
-from django.http import HttpResponse 
-from django.template.loader import render_to_string 
-from core.models.zone_monetaire import ZoneMonetaire
 from users.models import CustomUser
-from logs.models import UINotification
-from .shared import get_refreshed_dashboard_context_and_html
+from core.models import ZoneMonetaire
+from logs.models import LogEntry
+from django.db.models import Q
+from .shared import get_refreshed_dashboard_context # Import the shared function
 
 def dashboard_view(request):
-    user_role = request.session.get("role")
-    if user_role != "SUPERADMIN":
+    # Access control: Redirect if not authenticated or role is incorrect
+    if not request.user.is_authenticated or request.user.role != "SUPERADMIN":
+        # log_action for unauthorized access is handled in the login/impersonation views
+        # or can be added explicitly here if needed for direct URL access attempts
         return redirect("login")
 
+    # Get filter parameters from GET request
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', 'all')
-    zone_filter = request.GET.get('zone', 'all')
+    zone_filter_id = request.GET.get('zone', 'all') # Renamed to avoid conflict with 'zone' model
     role_filter = request.GET.get('role_filter', 'all')
 
-    # MODIFICATION : S'attendre à 2 valeurs seulement
-    context, html_dynamic_content = get_refreshed_dashboard_context_and_html(
-        request,
-        search_query=search_query,
-        status_filter=status_filter,
-        zone_filter=zone_filter,
-        role_filter=role_filter
-    )
-    
-    # Les notifications non lues sont déjà dans le contexte ici (ajoutées par shared.py)
-    # context['unread_notifications'] = ... (Cette ligne est gérée dans shared.py)
+    # Get the data for admins and consumers using the shared function
+    context = get_refreshed_dashboard_context(request, search_query, status_filter, zone_filter_id, role_filter)
 
+    # Add general context for the page (all zones for dropdowns, search query, selected filters)
+    context.update({
+        "all_zones": ZoneMonetaire.objects.all(),
+        "search_query": search_query,
+        "status": status_filter,
+        "selected_zone_id": zone_filter_id,
+        "selected_role": role_filter,
+        "current_user_role": request.user.role, # Use request.user.role directly
+    })
+
+    # Render the appropriate partial or full page based on HX-Request header
     if request.headers.get('HX-Request'):
-        # NE PAS FAIRE D'OOB SWAP POUR LES FILTRES ICI
-        return HttpResponse(html_dynamic_content)
-
+        # For HTMX requests, render only the dynamic content part
+        return render(request, "superadmin/partials/_full_dashboard_content.html", context)
+    
+    # For full page load, render the main dashboard template
     return render(request, "superadmin/dashboard.html", context)

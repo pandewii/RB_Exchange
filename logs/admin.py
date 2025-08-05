@@ -1,40 +1,31 @@
 from django.contrib import admin
-from .models import LogEntry
+from .models import LogEntry # UINotification is no longer imported
 
 @admin.register(LogEntry)
 class LogEntryAdmin(admin.ModelAdmin):
-    # Colonnes affichées dans la liste des logs
-    list_display = ('timestamp', 'actor_display', 'impersonator_display', 'action')
-    
-    # Filtres
-    list_filter = ('action', 'timestamp')
-    
-    # Champs de recherche
-    search_fields = ('actor__email', 'impersonator__email', 'action', 'details')
-    
-    # Champs en lecture seule pour éviter les modifications manuelles des logs
-    readonly_fields = ('actor', 'impersonator', 'action', 'details', 'timestamp')
-    
-    # Permet de naviguer par date
+    list_display = ('timestamp', 'action', 'actor_display', 'impersonator_display', 'target_user_display', 'zone', 'source', 'level') 
+    list_filter = ('action', 'level', 'zone', 'source', 'timestamp', 'actor__role', 'impersonator__role', 'target_user__role') 
+    search_fields = ('action', 'details', 'actor__email', 'impersonator__email', 'target_user__email', 'zone__nom', 'source__nom') 
+    readonly_fields = ('actor', 'impersonator', 'target_user', 'action', 'details', 'timestamp', 'level', 'zone', 'source') 
     date_hierarchy = 'timestamp'
-    
-    # Ordonnancement par défaut (le plus récent en premier)
     ordering = ('-timestamp',)
 
-    # Méthode personnalisée pour afficher l'email de l'acteur
     def actor_display(self, obj):
-        return obj.actor.email if obj.actor else "N/A"
+        return obj.actor.email if obj.actor else "Système" 
     actor_display.short_description = "Acteur"
 
-    # Méthode personnalisée pour afficher l'email de l'impersonator
     def impersonator_display(self, obj):
-        return obj.impersonator.email if obj.impersonator else "N/A"
+        return obj.impersonator.email if obj.impersonator else "-" 
     impersonator_display.short_description = "Agissait comme"
+    
+    def target_user_display(self, obj):
+        return obj.target_user.email if obj.target_user else "-" 
+    target_user_display.short_description = "Cible"
 
-    # Désactiver les boutons d'ajout et de suppression pour les LogEntry
-    # Les logs doivent être créés par le système, non manuellement.
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+# UINotificationAdmin registration is completely removed from this file.

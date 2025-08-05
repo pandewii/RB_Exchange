@@ -1,8 +1,8 @@
 # web_interface/views/admin_zone/shared.py
 
 from users.models import CustomUser
-from core.models import Devise, ActivatedCurrency, Source, ScrapedCurrencyRaw # Importez Source et ScrapedCurrencyRaw
-from django.db.models import Max # Importez Max pour trouver la date la plus récente
+from core.models import Devise, ActivatedCurrency, Source, ScrapedCurrencyRaw, DeviseAlias
+from django.db.models import Q # Add Q import for combined filtering in case needed elsewhere.
 
 def get_dashboard_context(user_id):
     """
@@ -10,19 +10,19 @@ def get_dashboard_context(user_id):
     La liste des devises mappées est désormais filtrée pour n'inclure que celles
     qui sont présentes dans les dernières données brutes de la source de la zone.
     """
-    user = CustomUser.objects.select_related('zone').get(pk=user_id)
+    # Use select_related('zone__source') to efficiently fetch the zone and its related source
+    user = CustomUser.objects.select_related('zone', 'zone__source').get(pk=user_id)
     
     if not user.zone:
         return {"error": "Vous n'êtes assigné à aucune zone."}
 
-    # Récupérer la source associée à la zone de l'utilisateur
-    source = Source.objects.filter(zone=user.zone).first()
+    # Accéder à la source via la relation inverse OneToOneField
+    # If a ZoneMonetaire object has a Source, it can be accessed as zone.source
+    source = user.zone.source if hasattr(user.zone, 'source') else None
     
-    # Initialiser la liste des devises mappées à afficher
-    all_mapped_devises_to_display = Devise.objects.none() # Commencer avec un queryset vide
+    all_mapped_devises_to_display = Devise.objects.none()
 
-    if source:
-        # Trouver la date de publication la plus récente pour cette source
+    if source: # Only proceed if a source is found for the zone
         latest_raw_data_entry = ScrapedCurrencyRaw.objects.filter(
             source=source,
             date_publication_brut__isnull=False
@@ -31,33 +31,30 @@ def get_dashboard_context(user_id):
         if latest_raw_data_entry:
             latest_date = latest_raw_data_entry.date_publication_brut
             
-            # Récupérer les codes ISO bruts uniques des devises de la dernière "photocopie"
-            # Assurez-vous que code_iso_brut n'est pas vide et le convertissez en majuscules pour la correspondance
-            latest_raw_iso_codes = ScrapedCurrencyRaw.objects.filter(
+            # Get all relevant raw identifiers (nom_devise_brut and code_iso_brut) for the latest date
+            raw_identifiers = set()
+            for raw_currency in ScrapedCurrencyRaw.objects.filter(
                 source=source,
                 date_publication_brut=latest_date
-            ).exclude(code_iso_brut__exact='').values_list('code_iso_brut', flat=True)
+            ):
+                if raw_currency.nom_devise_brut:
+                    raw_identifiers.add(raw_currency.nom_devise_brut.upper())
+                if raw_currency.code_iso_brut:
+                    raw_identifiers.add(raw_currency.code_iso_brut.upper())
             
-            # Convertir tous les codes en majuscules pour la recherche
-            latest_raw_iso_codes_upper = [code.upper() for code in latest_raw_iso_codes]
-
-            # Filtrer les devises officielles:
-            # 1. Elles doivent avoir un alias (être mappées)
-            # 2. Leur code doit correspondre à un code ISO brut trouvé dans les dernières données scrapées
-            all_mapped_devises_to_display = Devise.objects.filter(
-                aliases__isnull=False, # S'assurer qu'il y a un alias
-                code__in=latest_raw_iso_codes_upper # Le code officiel correspond à un code brut récent
-            ).distinct().order_by('nom')
+            if raw_identifiers:
+                # Find all DeviseAlias entries where the 'alias' matches one of our raw_identifiers
+                # And then get the distinct official Devise objects linked by these aliases
+                all_mapped_devises_to_display = Devise.objects.filter(
+                    aliases__alias__in=list(raw_identifiers)
+                ).distinct().order_by('nom')
         
-    # On récupère les devises qui sont spécifiquement activées pour la zone de cet utilisateur
     activated_devises_for_zone = ActivatedCurrency.objects.filter(zone=user.zone, is_active=True)
-    
-    # On crée un set des codes de devises actives pour une recherche rapide dans le template
     active_codes = set(d.devise.code for d in activated_devises_for_zone)
 
     context = {
         'zone': user.zone,
-        'all_mapped_devises': all_mapped_devises_to_display, # Utilisez la liste filtrée
+        'all_mapped_devises': all_mapped_devises_to_display,
         'active_codes': active_codes
     }
     

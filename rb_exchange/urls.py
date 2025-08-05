@@ -3,7 +3,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from authentication.views.impersonate import ImpersonateView, RevertImpersonationView
-from web_interface.views.common.audit_logs import AuditLogView, MarkUINotificationReadView
+from web_interface.views.common.audit_logs import AuditLogView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,5 +23,5 @@ urlpatterns = [
 
     # 5. Audit logs & notifications
     path('audit-logs/', AuditLogView.as_view(), name='audit_logs'),
-    path('notifications/read/<int:pk>/', MarkUINotificationReadView.as_view(), name='mark_notification_read'),
+   
 ]

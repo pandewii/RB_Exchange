@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-import sys
 import httpx
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -9,9 +8,6 @@ import json
 import re
 from dotenv import load_dotenv
 
-# Fix encodage terminal Windows
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
 
 # 🔐 Clé API ScraperAPI
 load_dotenv()
@@ -28,7 +24,7 @@ def fetch_page_content():
                 "render": "true",
                 "wait_for_selector": "table"
             },
-            timeout=120,  # ✅ durée augmentée
+            timeout=60,
         )
         response.raise_for_status()
         return response.text

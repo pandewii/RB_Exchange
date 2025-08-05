@@ -30,8 +30,9 @@
 
     {# Bouton "Retour" simple #}
     <div class="mt-6 text-center">
-        <a href="javascript:history.back()" class="text-sm text-blue-600 hover:underline">
-            &larr; Retour à la page précédente
+        {# MODIFIED: Change from javascript:history.back() to a direct URL based on user's role #}
+        <a href="{% if current_user_role == 'SUPERADMIN' %}{% url 'superadmin_dashboard' %}{% elif current_user_role == 'ADMIN_TECH' %}{% url 'admin_technique_dashboard' %}{% elif current_user_role == 'ADMIN_ZONE' %}{% url 'admin_zone_dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="text-sm text-blue-600 hover:underline">
+            &larr; Retour au tableau de bord
         </a>
     </div>
 

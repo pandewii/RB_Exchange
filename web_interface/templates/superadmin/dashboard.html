@@ -23,68 +23,18 @@
         </div>
     </div>
 
-    {# NOUVEL EMPLACEMENT DU FORMULAIRE DE FILTRES #}
-    <form id="filters-form"
-          hx-get="{% url 'superadmin_dashboard' %}"
-          hx-target="#dashboard-dynamic-content" {# Cible le contenu dynamique des tables #}
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          hx-trigger="change, keyup from:[name='q'] changed delay:500ms">
+    {# NEW WRAPPER CONTAINER: This div will be swapped by HTMX #}
+    <div id="dashboard-main-content-container"> 
+        {# Include the filter form partial (which now targets this container) #}
+        {% include "superadmin/partials/_filters_form.html" %}
 
-        <div class="bg-white p-4 rounded-xl shadow space-y-4">
-            <input type="text"
-                   name="q"
-                   value="{{ search_query }}"
-                   class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#a6183b]"
-                   placeholder="Rechercher par nom ou email...">
-            
-            <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-                
-                <div class="flex items-center gap-2">
-                    <span class="font-semibold text-gray-600">Statut:</span>
-                    <div class="flex gap-2">
-                        <input type="radio" name="status" value="all" id="status-all" class="hidden" {% if status == 'all' or not status %}checked{% endif %}>
-                        <label for="status-all" class="px-3 py-1 text-sm rounded-full transition cursor-pointer {% if status == 'all' or not status %}bg-[#a6183b] text-white{% else %}bg-gray-200 hover:bg-gray-300{% endif %}">Tous</label>
-
-                        <input type="radio" name="status" value="active" id="status-active" class="hidden" {% if status == 'active' %}checked{% endif %}>
-                        <label for="status-active" class="px-3 py-1 text-sm rounded-full transition cursor-pointer {% if status == 'active' %}bg-[#a6183b] text-white{% else %}bg-gray-200 hover:bg-gray-300{% endif %}">Actifs</label>
-
-                        <input type="radio" name="status" value="inactive" id="status-inactive" class="hidden" {% if status == 'inactive' %}checked{% endif %}>
-                        <label for="status-inactive" class="px-3 py-1 text-sm rounded-full transition cursor-pointer {% if status == 'inactive' %}bg-[#a6183b] text-white{% else %}bg-gray-200 hover:bg-gray-300{% endif %}">Inactifs</label>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <label for="zone-filter" class="font-semibold text-gray-600">Zone:</label>
-                    <select name="zone" id="zone-filter" class="border-gray-300 rounded-lg shadow-sm text-sm">
-                        <option value="all">Toutes les zones</option>
-                        {% for zone in zones %}
-                        <option value="{{ zone.id }}" {% if selected_zone_id == zone.id|stringformat:"s" %}selected{% endif %}>
-                            {{ zone.nom }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <label for="role-filter" class="font-semibold text-gray-600">Rôle Admin:</label>
-                    <select name="role_filter" id="role-filter" class="border-gray-300 rounded-lg shadow-sm text-sm">
-                        <option value="all">Tous les rôles</option>
-                        <option value="ADMIN_TECH" {% if selected_role == 'ADMIN_TECH' %}selected{% endif %}>Admin Technique</option>
-                        <option value="ADMIN_ZONE" {% if selected_role == 'ADMIN_ZONE' %}selected{% endif %}>Admin Zone</option>
-                    </select>
-                </div>
-            </div>
+        {# The dynamic content of the dashboard (user tables) is included here #}
+        {# This div ID should still be used by the add/edit/delete forms as their hx-target #}
+        <div id="dashboard-dynamic-content" class="mt-6">
+            {% include "superadmin/partials/dashboard_content.html" %}
         </div>
-    </form>
-
-    {# Le contenu dynamique du tableau de bord (tables des utilisateurs) est inclus ici #}
-    <div id="dashboard-dynamic-content" class="mt-6">
-        {# Inclus le contenu principal des tables d'utilisateurs #}
-        {% include "superadmin/partials/dashboard_content.html" %}
     </div>
 
-    {# Nouveau bloc simplifié pour le lien vers les logs d'audit, situé après le contenu dynamique #}
     <div class="bg-white p-6 rounded-xl shadow mt-6 text-center">
         <h2 class="text-lg font-semibold text-gray-700 mb-4">Logs du Système</h2>
         <p class="text-gray-500 py-4">Pour consulter tous les logs d'audit du système :</p>

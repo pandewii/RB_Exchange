@@ -3,8 +3,8 @@
         <h2 class="text-xl font-semibold mb-4 text-gray-800">Modifier l'utilisateur</h2>
 
         <form method="post" 
-              hx-post="{% url 'superadmin_edit_admin_view' pk=user.pk %}" {# CORRECTION: user.id -> user.pk #}
-              hx-target="#dashboard-dynamic-content" 
+              hx-post="{% url 'superadmin_edit_admin_view' pk=user.pk %}" 
+              hx-target="#dashboard-main-content-container" {# CHANGED #}
               hx-swap="innerHTML">
             {% csrf_token %}
 

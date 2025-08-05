@@ -1,63 +1,53 @@
-# web_interface/views/superadmin/shared.py
-
-from django.template.loader import render_to_string
 from users.models import CustomUser
-from core.models.zone_monetaire import ZoneMonetaire
-from logs.models import UINotification
-from django.db.models import Q 
+from core.models import ZoneMonetaire
+from django.db.models import Q # Ensure Q is imported for complex queries
 
-def get_refreshed_dashboard_context_and_html(request, search_query="", status_filter="all", zone_filter="all", role_filter="all"):
-    admin_roles = ['ADMIN_TECH', 'ADMIN_ZONE']
-    consumer_roles = ['WS_USER']
-    
-    admins_queryset = CustomUser.objects.filter(role__in=admin_roles)
-    consumers_queryset = consumers_queryset = CustomUser.objects.filter(role__in=consumer_roles)
+def get_refreshed_dashboard_context(request, search_query, status_filter, zone_filter_id, role_filter):
+    """
+    Récupère les données filtrées pour le tableau de bord SuperAdmin (admins et consommateurs).
+    Cette fonction est conçue pour être appelée par HTMX pour rafraîchir uniquement les données.
+    Elle ne retourne PAS de contenu HTML directement.
+    """
+    all_users_queryset = CustomUser.objects.all().select_related('zone').order_by('-date_joined')
 
+    # Filtrage commun (texte de recherche)
     if search_query:
-        search_filter_q = (
-            Q(email__icontains=search_query) | 
-            Q(username__icontains=search_query)
+        all_users_queryset = all_users_queryset.filter(
+            Q(username__icontains=search_query) |
+            Q(email__icontains=search_query)
         )
-        admins_queryset = admins_queryset.filter(search_filter_q)
-        consumers_queryset = consumers_queryset.filter(search_filter_q)
 
+    # Filtrage par statut
     if status_filter == 'active':
-        admins_queryset = admins_queryset.filter(is_active=True)
-        consumers_queryset = consumers_queryset.filter(is_active=True)
+        all_users_queryset = all_users_queryset.filter(is_active=True)
     elif status_filter == 'inactive':
-        admins_queryset = admins_queryset.filter(is_active=False)
-        consumers_queryset = consumers_queryset.filter(is_active=False)
-        
-    if zone_filter != 'all' and zone_filter.isdigit():
-        admins_queryset = admins_queryset.filter(zone_id=int(zone_filter))
-        consumers_queryset = consumers_queryset.filter(zone_id=int(zone_filter))
+        all_users_queryset = all_users_queryset.filter(is_active=False)
 
-    if role_filter != 'all':
-        admins_queryset = admins_queryset.filter(role=role_filter)
-        
-    admins = admins_queryset.order_by("id")
-    consumers = consumers_queryset.order_by("id")
+    # Filtrage par zone (pour ADMIN_ZONE et WS_USER)
+    if zone_filter_id != 'all' and zone_filter_id:
+        all_users_queryset = all_users_queryset.filter(zone__pk=zone_filter_id)
+
+    # Séparation des administrateurs et des consommateurs
+    admins_queryset = all_users_queryset.filter(
+        role__in=['SUPERADMIN', 'ADMIN_TECH', 'ADMIN_ZONE']
+    )
+    consumers_queryset = all_users_queryset.filter(role='WS_USER')
+
+    # Filtrage par rôle spécifique pour les admins (si demandé)
+    if role_filter != 'all' and role_filter:
+        if role_filter in ['ADMIN_TECH', 'ADMIN_ZONE']: # SUPERADMINs are always shown unless specifically filtered out
+            admins_queryset = admins_queryset.filter(role=role_filter)
+        # If SUPERADMIN filter is needed, it would be another condition
+    
+    # Exclude the current SUPERADMIN from the list of admins that can be modified/deleted by themselves.
+    # This is a common UI/UX practice, although backend checks are the primary security.
+    # We should exclude the current user from the list if they are a SUPERADMIN.
+    if request.user.is_authenticated and request.user.role == 'SUPERADMIN':
+        admins_queryset = admins_queryset.exclude(pk=request.user.pk)
+
 
     context = {
-        "admins": admins,
-        "consumers": consumers,
-        "zones": ZoneMonetaire.objects.all(),
-        "search_query": search_query,
-        "status": status_filter,
-        "selected_zone_id": zone_filter,
-        "selected_role": role_filter,
-        "current_user_role": request.session.get('role'),
+        'admins': admins_queryset,
+        'consumers': consumers_queryset,
     }
-    
-    unread_notifications = []
-    if request.user.is_authenticated:
-        unread_notifications = UINotification.objects.filter(
-            user=request.user,
-            is_read=False
-        ).order_by('-timestamp')[:10]
-    context['unread_notifications'] = unread_notifications # Les notifications sont dans le contexte
-
-    html_main_content = render_to_string("superadmin/partials/dashboard_content.html", context, request=request)
-    
-    # RETOURNE 2 VALEURS SEULEMENT (context et html_main_content)
-    return context, html_main_content
+    return context

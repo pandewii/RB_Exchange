@@ -10,6 +10,8 @@
                 <th class="py-2 px-4">Acteur</th>
                 <th class="py-2 px-4">Agissait comme</th>
                 <th class="py-2 px-4">Cible</th>
+                <th class="py-2 px-4">Zone</th>
+                <th class="py-2 px-4">Source</th>
                 <th class="py-2 px-4">Détails</th>
                 <th class="py-2 px-4">Niveau</th>
             </tr>
@@ -40,6 +42,20 @@
                         -
                     {% endif %}
                 </td>
+                <td class="py-2 px-4">
+                    {% if log.zone %}
+                        {{ log.zone.nom }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="py-2 px-4">
+                    {% if log.source %}
+                        {{ log.source.nom }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td class="py-2 px-4 text-sm text-gray-700">{{ log.details }}</td>
                 <td class="py-2 px-4">
                     <span class="px-2 py-1 text-xs font-semibold rounded-full
@@ -53,7 +69,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="7" class="text-center py-4 text-gray-500">Aucun log trouvé.</td>
+                <td colspan="9" class="text-center py-4 text-gray-500">Aucun log trouvé.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -66,23 +82,22 @@
             Total: {{ logs.paginator.count }} logs.
         </div>
         <div>
-            {# Les paramètres de requête pour la pagination avec SEULEMENT 'q' #}
-            {% with current_params='&q='|add:search_query %}
-                {% if logs.has_previous %}
-                    <button hx-get="{% url 'audit_logs' %}?page={{ logs.previous_page_number }}{{ current_params }}"
-                            hx-target="#audit-log-content" hx-swap="outerHTML" {# Remplace SEULEMENT ce div #}
-                            class="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300">
-                        Précédent
-                    </button>
-                {% endif %}
-                {% if logs.has_next %}
-                    <button hx-get="{% url 'audit_logs' %}?page={{ logs.next_page_number }}{{ current_params }}"
-                            hx-target="#audit-log-content" hx-swap="outerHTML" {# Remplace SEULEMENT ce div #}
-                            class="px-3 py-1 ml-2 bg-gray-200 rounded-lg hover:bg-gray-300">
-                        Suivant
-                    </button>
-                {% endif %}
-            {% endwith %}
+            {% url 'audit_logs' as audit_logs_url %}
+            {# Use base_query_string prepared in the view #}
+            {% if logs.has_previous %}
+                <button hx-get="{{ audit_logs_url }}?page={{ logs.previous_page_number }}{% if base_query_string %}&{{ base_query_string }}{% endif %}"
+                        hx-target="#audit-log-content" hx-swap="outerHTML" 
+                        class="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300">
+                    Précédent
+                </button>
+            {% endif %}
+            {% if logs.has_next %}
+                <button hx-get="{{ audit_logs_url }}?page={{ logs.next_page_number }}{% if base_query_string %}&{{ base_query_string }}{% endif %}"
+                        hx-target="#audit-log-content" hx-swap="outerHTML" 
+                        class="px-3 py-1 ml-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                    Suivant
+                </button>
+            {% endif %}
         </div>
     </div>
 </div>

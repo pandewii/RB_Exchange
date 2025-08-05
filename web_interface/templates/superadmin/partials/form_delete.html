@@ -15,7 +15,7 @@
             <div class="items-center px-4 py-3">
                 <form 
                     hx-post="{% url 'superadmin_delete_admin_view' pk=user_to_delete.pk %}"
-                    hx-target="#dashboard-dynamic-content"
+                    hx-target="#dashboard-main-content-container" {# CHANGED #}
                     hx-swap="innerHTML"
                     class="flex justify-end space-x-2">
                     

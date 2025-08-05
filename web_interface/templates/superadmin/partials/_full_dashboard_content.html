@@ -1,0 +1,8 @@
+{# This partial contains both the filter form and the dashboard tables, to be swapped by HTMX #}
+{# REMOVED ID FROM THIS OUTERMOST DIV #}
+<div> 
+    {% include "superadmin/partials/_filters_form.html" %}
+    <div id="dashboard-dynamic-content" class="mt-6">
+        {% include "superadmin/partials/dashboard_content.html" %}
+    </div>
+</div>

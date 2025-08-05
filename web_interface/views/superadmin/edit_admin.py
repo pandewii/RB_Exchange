@@ -3,40 +3,52 @@ from django.http import HttpResponse
 from users.models import CustomUser
 from core.models.zone_monetaire import ZoneMonetaire
 from email_validator import validate_email, EmailNotValidError
-from .shared import get_refreshed_dashboard_context_and_html
-from logs.utils import log_action # Importation de log_action
+from .shared import get_refreshed_dashboard_context # CORRECTED IMPORT
+from logs.utils import log_action
+from django.template.loader import render_to_string # ADDED for rendering HTML
 
 def edit_admin_view(request, pk):
+    # Access control: Ensure user is authenticated and is a SuperAdmin
+    if not request.user.is_authenticated or request.user.role != "SUPERADMIN":
+        log_action(
+            actor_id=request.user.pk if request.user.is_authenticated else None,
+            action='UNAUTHORIZED_ACCESS_ATTEMPT',
+            details=f"Accès non autorisé pour modifier un administrateur par {request.user.email if request.user.is_authenticated else 'Utilisateur non authentifié'} (ID: {request.user.pk if request.user.is_authenticated else 'N/A'}). Rôle insuffisant.",
+            level='warning'
+        )
+        return HttpResponse("Accès non autorisé.", status=403)
+
     user = get_object_or_404(CustomUser, pk=pk)
 
+    # Determine zone object for logging based on the user being edited
+    log_zone_obj = user.zone
+
+    # SuperAdmin modification attempt specific checks
     if user.role == 'SUPERADMIN':
         response = HttpResponse("Action non autorisée sur un SuperAdmin.", status=403)
         response['HX-Trigger'] = '{"showError": "Action non autorisée sur un SuperAdmin."}'
         
-        # MODIFICATION : Log pour tentative de modification de SuperAdmin
         log_action(
-            actor_id=request.session['user_id'],
+            actor_id=request.user.pk,
             action='SUPERADMIN_MODIFICATION_ATTEMPT',
-            details=f"Tentative de modification du SuperAdmin {user.email} (ID: {user.pk}) par {request.session.get('email')} (ID: {request.session.get('user_id')}).",
+            details=f"Tentative de modification du SuperAdmin {user.email} (ID: {user.pk}) par {request.user.email} (ID: {request.user.pk}).",
             target_user_id=user.pk,
-            level='warning' # Ou 'error' si vous considérez cela comme plus grave
+            level='warning', 
+            zone_obj=log_zone_obj, 
+            source_obj=None
         )
         return response
 
     if request.method == "POST":
-        # Conserver les valeurs originales pour le logging
         original_username = user.username
         original_email = user.email
         original_role = user.role
         original_zone = user.zone.nom if user.zone else "Aucune"
-        original_is_active = user.is_active
+        # original_is_active = user.is_active # Not modified in this view, so no need to track
 
         email = request.POST.get("email", "").strip()
         new_role = request.POST.get("role")
         zone_id = request.POST.get("zone_id")
-        
-        # --- Début de la logique de validation et de mise à jour ---
-        # Cette partie est essentielle pour déterminer ce qui a changé
         
         validation_error_message = None
 
@@ -58,34 +70,44 @@ def edit_admin_view(request, pk):
             response = HttpResponse(validation_error_message)
             response['HX-Retarget'] = '#edit-form-error-message'
             response.status_code = 400
-            response['HX-Trigger'] = '{"showError": "Échec de la modification de l\'utilisateur."}' # Message générique pour le toast
+            response['HX-Trigger'] = '{"showError": "Échec de la modification de l\'utilisateur."}' 
             
-            # MODIFICATION : Log pour échec de modification
+            temp_zone_obj = None
+            if zone_id and zone_id.isdigit():
+                try:
+                    temp_zone_obj = ZoneMonetaire.objects.get(pk=zone_id)
+                except ZoneMonetaire.DoesNotExist:
+                    pass 
+
             log_action(
-                actor_id=request.session['user_id'],
+                actor_id=request.user.pk,
                 action='USER_MODIFICATION_FAILED',
-                details=f"Échec de la modification de l'utilisateur {user.email} (ID: {user.pk}) par {request.session.get('email')} (ID: {request.session.get('user_id')}). Erreur: {validation_error_message.replace('<p>', '').replace('</p>', '')}",
+                details=f"Échec de la modification de l'utilisateur {user.email} (ID: {user.pk}) par {request.user.email} (ID: {request.user.pk}). Erreur: {validation_error_message.replace('<p>', '').replace('</p>', '')}",
                 target_user_id=user.pk,
-                level='warning'
+                level='warning',
+                zone_obj=temp_zone_obj or log_zone_obj, 
+                source_obj=None
             )
             return response
             
-        # Mettre à jour l'utilisateur si les validations passent
         user.username = request.POST.get("username", user.username)
         user.email = email
 
         if new_role and new_role in ['ADMIN_TECH', 'ADMIN_ZONE', 'WS_USER']:
             user.role = new_role
+            if new_role in ["ADMIN_ZONE", "WS_USER"]:
+                user.zone_id = zone_id # This should be the ID
+            else:
+                user.zone_id = None 
         
-        if user.role in ["ADMIN_ZONE", "WS_USER"]:
-            user.zone_id = zone_id
-        else:
-            user.zone_id = None
-            
         user.save()
 
-        # --- Logging de la modification réussie ---
-        log_details = f"L'utilisateur {request.session.get('email')} (ID: {request.session.get('user_id')}, Rôle: {request.session.get('role')}) a modifié l'utilisateur {user.email} (ID: {user.pk})."
+        log_zone_obj_after_save = user.zone
+
+        log_details = (
+            f"L'utilisateur {request.user.email} (ID: {request.user.pk}, Rôle: {request.user.role}) "
+            f"a modifié l'utilisateur {user.email} (ID: {user.pk})."
+        )
         changes = []
         if original_username != user.username:
             changes.append(f"Nom d'utilisateur: '{original_username}' -> '{user.username}'")
@@ -102,18 +124,26 @@ def edit_admin_view(request, pk):
         if changes:
             log_details += " Changements: " + "; ".join(changes) + "."
         else:
-            log_details += " Aucun changement détecté." # Au cas où il n'y aurait eu aucune modification réelle
+            log_details += " Aucun changement détecté." 
 
         log_action(
-            actor_id=request.session['user_id'],
+            actor_id=request.user.pk,
             action='USER_MODIFIED',
             details=log_details,
             target_user_id=user.pk,
-            level='info'
+            level='info',
+            zone_obj=log_zone_obj_after_save, 
+            source_obj=None
         )
-        # --- Fin du logging ---
 
-        context, html_content = get_refreshed_dashboard_context_and_html(request)
+        # Correctly call the shared function to get context only, then render HTML
+        dashboard_context = get_refreshed_dashboard_context(request, '', 'all', 'all', 'all') # Pass current filters or defaults
+        dashboard_context.update({
+            "all_zones": ZoneMonetaire.objects.all(), # Needed for filter dropdowns in dashboard.html partial
+            "current_user_role": request.user.role,
+        })
+        html_content = render_to_string("superadmin/partials/_full_dashboard_content.html", dashboard_context, request=request)
+
         response = HttpResponse(html_content)
         response['HX-Trigger'] = '{"showSuccess": "Utilisateur modifié avec succès."}'
         return response
@@ -122,6 +152,6 @@ def edit_admin_view(request, pk):
     context = {
         "user": user,
         "zones": zones,
-        "current_user_role": request.session.get('role'),
+        "current_user_role": request.user.role, # Use request.user.role
     }
     return render(request, "superadmin/partials/form_edit.html", context)

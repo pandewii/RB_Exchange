@@ -4,60 +4,58 @@ from django.shortcuts import get_object_or_404
 from django.views import View
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from core.models import Devise, ActivatedCurrency
-from users.models import CustomUser # Assurez-vous que CustomUser est importé
-from logs.utils import log_action 
+from core.models import Devise, ActivatedCurrency, ZoneMonetaire
+from users.models import CustomUser
+from logs.utils import log_action
 
 class ToggleActivationView(View):
     def post(self, request, devise_code):
-        # L'utilisateur dont la session est actuellement active (ex: l'Admin Zone impersonné)
-        current_active_user_id = request.session.get('user_id')
-        current_active_user = get_object_or_404(CustomUser, pk=current_active_user_id)
-
-        actor_id_for_log = current_active_user_id # Par défaut: l'utilisateur actuel est l'acteur
-        impersonator_id_for_log = None # Par défaut: pas d'impersonateur
-
-        # Vérifier si une impersonation est active
-        if 'impersonation_stack' in request.session and request.session['impersonation_stack']:
-            # L'acteur racine est le premier utilisateur dans la pile d'impersonation
-            actor_id_for_log = request.session['impersonation_stack'][0]['user_id']
-            
-            # L'impersonateur est l'utilisateur dont la session était active *immédiatement avant* la session actuelle.
-            # C'est le dernier utilisateur ID poussé sur la pile d'impersonation.
-            impersonator_id_for_log = request.session['impersonation_stack'][-1]['user_id']
-        
-        # Récupérer les objets utilisateur réels pour la chaîne de détails du log
-        root_actor_obj = get_object_or_404(CustomUser, pk=actor_id_for_log)
-        impersonator_obj = None
-        if impersonator_id_for_log:
-            impersonator_obj = get_object_or_404(CustomUser, pk=impersonator_id_for_log)
-
-
-        if request.session.get("role") != "ADMIN_ZONE":
+        # Access control: Ensure user is authenticated and is an ADMIN_ZONE
+        if not request.user.is_authenticated or request.user.role != "ADMIN_ZONE":
             log_action(
-                actor_id=actor_id_for_log,
-                impersonator_id=impersonator_id_for_log,
+                actor_id=request.user.pk if request.user.is_authenticated else None,
                 action='UNAUTHORIZED_ACCESS_ATTEMPT',
-                details=f"Accès non autorisé pour basculer l'activation d'une devise par {current_active_user.email} (ID: {current_active_user.pk}). Rôle insuffisant.",
-                level='warning'
+                details=f"Accès non autorisé pour basculer l'activation d'une devise par {request.user.email if request.user.is_authenticated else 'Utilisateur non authentifié'} (ID: {request.user.pk if request.user.is_authenticated else 'N/A'}). Rôle insuffisant.",
+                level='warning',
+                zone_obj=None,
+                source_obj=None
             )
             return HttpResponse("Accès non autorisé.", status=403, headers={'HX-Trigger': '{"showError": "Accès non autorisé."}'})
 
-        if not current_active_user.zone:
+        # Start impersonation logic setup for logging
+        actor_id_for_log = request.user.pk # Default to current user's PK
+        impersonator_id_for_log = None
+        current_active_user_obj = request.user # This is already the current user after auth middleware
+
+        if 'impersonation_stack' in request.session and request.session['impersonation_stack']:
+            actor_id_for_log = request.session['impersonation_stack'][0]['user_id']
+            impersonator_id_for_log = request.session['impersonation_stack'][-1]['user_id']
+        
+        # Fetch actual user objects for logging details, if necessary
+        root_actor_obj = get_object_or_404(CustomUser, pk=actor_id_for_log) if actor_id_for_log else None
+        impersonator_obj = get_object_or_404(CustomUser, pk=impersonator_id_for_log) if impersonator_id_for_log else None
+        # End impersonation logic setup
+
+        # Get the zone object for logging (it's current_active_user_obj.zone)
+        log_zone_obj = current_active_user_obj.zone
+
+        if not current_active_user_obj.zone:
             error_message = "Action impossible : vous n'êtes pas assigné à une zone."
             log_action(
                 actor_id=actor_id_for_log,
                 impersonator_id=impersonator_id_for_log,
-                action='CURRENCY_TOGGLE_FAILED_NO_ZONE', 
-                details=f"Échec de bascule de l'activation de devise par {current_active_user.email} (ID: {current_active_user.pk}) car non assigné à une zone.",
-                level='warning'
+                action='CURRENCY_TOGGLE_FAILED_NO_ZONE',
+                details=f"Échec de bascule de l'activation de devise par {current_active_user_obj.email} (ID: {current_active_user_obj.pk}) car non assigné à une zone.",
+                level='warning',
+                zone_obj=log_zone_obj,
+                source_obj=None
             )
             return HttpResponse(error_message, status=400, headers={'HX-Trigger': f'{{"showError": "{error_message}"}}'})
         
         devise = get_object_or_404(Devise, pk=devise_code)
 
         activation, created = ActivatedCurrency.objects.get_or_create(
-            zone=current_active_user.zone,
+            zone=current_active_user_obj.zone,
             devise=devise
         )
 
@@ -66,20 +64,19 @@ class ToggleActivationView(View):
         activation.save()
         new_status = "active" if activation.is_active else "inactive"
         
-        # Construire la chaîne de détails avec les informations d'impersonation
+        # Build log details with impersonation info
         details_prefix = f"L'officier {root_actor_obj.email} (ID: {root_actor_obj.pk}, Rôle: {root_actor_obj.get_role_display()})"
         if impersonator_obj:
             details_prefix += f" (agissant via {impersonator_obj.email} (ID: {impersonator_obj.pk}, Rôle: {impersonator_obj.get_role_display()}))"
-            # Si l'acteur racine est différent de l'utilisateur effectif actuel (celui dont la session est active)
-            if root_actor_obj.pk != current_active_user.pk: 
-                 details_prefix += f" et exécuté par {current_active_user.email} (ID: {current_active_user.pk}, Rôle: {current_active_user.get_role_display()})"
-        else: # Pas d'impersonation, donc l'acteur racine est l'utilisateur actif actuel
-            details_prefix = f"L'administrateur {current_active_user.email} (ID: {current_active_user.pk}, Rôle: {current_active_user.get_role_display()})"
+            if root_actor_obj.pk != current_active_user_obj.pk:
+                 details_prefix += f" et exécuté par {current_active_user_obj.email} (ID: {current_active_user_obj.pk}, Rôle: {current_active_user_obj.get_role_display()})"
+        else:
+            details_prefix = f"L'administrateur {current_active_user_obj.email} (ID: {current_active_user_obj.pk}, Rôle: {current_active_user_obj.get_role_display()})"
 
 
         log_details = (
             f"{details_prefix} a basculé le statut de la devise '{devise.code}' (Nom: {devise.nom}) "
-            f"pour la zone '{current_active_user.zone.nom}' (ID: {current_active_user.zone.pk}) "
+            f"pour la zone '{current_active_user_obj.zone.nom}' (ID: {current_active_user_obj.zone.pk}) "
             f"de '{old_status}' à '{new_status}'."
         )
 
@@ -88,18 +85,19 @@ class ToggleActivationView(View):
             impersonator_id=impersonator_id_for_log,
             action='CURRENCY_ACTIVATION_TOGGLED',
             details=log_details,
-            target_user_id=None, 
+            target_user_id=None,
             level='info',
-            zone_id=current_active_user.zone.pk 
+            zone_obj=log_zone_obj,
+            source_obj=None
         )
 
-        activated_devises_for_zone = ActivatedCurrency.objects.filter(zone=current_active_user.zone, is_active=True)
+        activated_devises_for_zone = ActivatedCurrency.objects.filter(zone=current_active_user_obj.zone, is_active=True)
         active_codes = set(d.devise.code for d in activated_devises_for_zone)
 
         context = {
-            'devise': devise, 
+            'devise': devise,
             'active_codes': active_codes,
-            'current_user_role': request.session.get('role'), 
+            'current_user_role': request.user.role, # Use request.user.role
         }
         html = render_to_string("admin_zone/partials/_currency_row.html", context, request=request)
         

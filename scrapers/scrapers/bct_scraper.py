@@ -13,7 +13,7 @@ URL = "https://www.bct.gov.tn/bct/siteprod/cours.jsp"
 def scraper_bct_exchange_rates():
     try:
         # Correction: Supprimez 'verify=False' et les avertissements si utilisés ici
-        response = requests.get(URL, timeout=15)
+        response = requests.get(URL, timeout=60)
         response.raise_for_status() # Lève une exception pour les codes d'erreur 4xx/5xx
     except requests.exceptions.RequestException as e:
         print(f"Erreur de connexion : {e}", file=sys.stderr)

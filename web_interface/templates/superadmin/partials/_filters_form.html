@@ -1,8 +1,8 @@
 {# Ce partial contient uniquement le formulaire de filtres du dashboard SuperAdmin #}
 <form id="filters-form"
       hx-get="{% url 'superadmin_dashboard' %}"
-      hx-target="#dashboard-dynamic-content" {# Ce target restera pour les tables #}
-      hx-swap="innerHTML"
+      hx-target="#dashboard-main-content-container" {# CHANGED: Target the new container #}
+      hx-swap="innerHTML" {# CHANGED: Replace the innerHTML of the target #}
       hx-push-url="true"
       hx-trigger="change, keyup from:[name='q'] changed delay:500ms">
 
@@ -33,7 +33,7 @@
                 <label for="zone-filter" class="font-semibold text-gray-600">Zone:</label>
                 <select name="zone" id="zone-filter" class="border-gray-300 rounded-lg shadow-sm text-sm">
                     <option value="all">Toutes les zones</option>
-                    {% for zone in zones %}
+                    {% for zone in all_zones %}
                     <option value="{{ zone.id }}" {% if selected_zone_id == zone.id|stringformat:"s" %}selected{% endif %}>
                         {{ zone.nom }}
                     </option>
@@ -50,4 +50,5 @@
                 </select>
             </div>
         </div>
-    </form>
+    </div>
+</form>
