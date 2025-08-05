@@ -7,6 +7,7 @@ from core.models import Source, ZoneMonetaire
 from users.models import CustomUser
 from scrapers.tasks import run_scraper_for_source
 from logs.utils import log_action
+from django.template.loader import render_to_string # NOUVEAU : Import pour rendre le HTML
 
 class ExecuteScraperView(View):
     def post(self, request, source_id):
@@ -25,13 +26,12 @@ class ExecuteScraperView(View):
         # Start impersonation logic setup for logging
         actor_id_for_log = request.user.pk
         impersonator_id_for_log = None
-        current_active_user_obj = request.user # This is already the current user after auth middleware
+        current_active_user_obj = request.user
 
         if 'impersonation_stack' in request.session and request.session['impersonation_stack']:
             actor_id_for_log = request.session['impersonation_stack'][0]['user_id']
             impersonator_id_for_log = request.session['impersonation_stack'][-1]['user_id']
         
-        # Fetch actual user objects for logging details, if necessary
         root_actor_obj = get_object_or_404(CustomUser, pk=actor_id_for_log) if actor_id_for_log else None
         impersonator_obj = get_object_or_404(CustomUser, pk=impersonator_id_for_log) if impersonator_id_for_log else None
         # End impersonation logic setup
@@ -39,15 +39,14 @@ class ExecuteScraperView(View):
         source = get_object_or_404(Source, pk=source_id)
         zone = source.zone
 
-        # Lancement de la tâche Celery d'exécution du scraper
         try:
+            # Lancement de la tâche Celery d'exécution du scraper
             run_scraper_for_source.delay(source.pk)
             message_type_ui = "showSuccess"
             message_text_ui = f"Exécution manuelle du scraper pour '{source.nom}' lancée avec succès en arrière-plan."
             log_level = 'info'
             action_type = 'SCRAPER_MANUAL_EXECUTION_STARTED'
 
-            # Construction du message de log
             details_prefix = f"L'administrateur {root_actor_obj.email if root_actor_obj else 'Utilisateur inconnu'} (ID: {actor_id_for_log}, Rôle: {root_actor_obj.get_role_display() if root_actor_obj else 'N/A'})"
             if impersonator_obj:
                 details_prefix += f" (agissant via {impersonator_obj.email} (ID: {impersonator_obj.pk}, Rôle: {impersonator_obj.get_role_display()}))"
@@ -78,7 +77,6 @@ class ExecuteScraperView(View):
                 f"{details_prefix} a échoué à lancer manuellement l'exécution du scraper pour la source '{source.nom}' (ID: {source.pk}) de la zone '{zone.nom}' (ID: {zone.pk}). Erreur: {e}"
             )
 
-
         log_action(
             actor_id=actor_id_for_log,
             impersonator_id=impersonator_id_for_log,
@@ -89,7 +87,15 @@ class ExecuteScraperView(View):
             zone_obj=zone,
             source_obj=source
         )
+
+        # NOUVEAU : Rendre le HTML du bouton mis à jour
+        context = {
+            "zone": zone,
+            "source": source,
+            "current_user_role": request.user.role,
+        }
+        html = render_to_string("admin_technique/partials/_source_details.html", context, request=request)
         
-        response = HttpResponse(status=204)
+        response = HttpResponse(html)
         response['HX-Trigger'] = f'{{"{message_type_ui}": "{message_text_ui}"}}'
         return response

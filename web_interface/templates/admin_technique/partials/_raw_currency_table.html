@@ -21,7 +21,7 @@
                 <thead class="text-xs uppercase text-gray-600 border-b">
                     <tr>
                         <th class="py-2 px-4">Nom Brut</th>
-                        <th class="py-2 px-4">Code ISO Brut</th>
+                        {# SUPPRESSION : Colonne "Code ISO Brut" #}
                         <th class="py-2 px-4 text-center">Taux Brut</th>
                         <th class="py-2 px-4 text-center">Multiplicateur</th>
                         <th class="py-2 px-4">Statut de l'Alias</th>
@@ -36,7 +36,7 @@
 
                     <tr class="border-t hover:bg-gray-50 {% if not official_devise %}bg-red-50{% endif %}">
                         <td class="py-2 px-4 font-mono">{{ currency.nom_devise_brut|default:"-" }}</td>
-                        <td class="py-2 px-4 font-mono">{{ currency.code_iso_brut|default:"-" }}</td>
+                        {# SUPPRESSION : Cellule "Code ISO Brut" #}
                         <td class="py-2 px-4 font-mono text-center">{{ currency.valeur_brute }}</td> 
                         <td class="py-2 px-4 font-mono text-center">{{ currency.multiplicateur_brut }}</td>
                         <td class="py-2 px-4">
