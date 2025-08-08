@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_htmx',
     'drf_yasg',
+    'drf_spectacular',
     'django_celery_beat',
 
     # Local apps
@@ -98,6 +99,15 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'RB Exchange API',
+    'DESCRIPTION': 'Documentation interactive de l’API publique pour les consommateurs (ERP, CRM...)',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
 }
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),

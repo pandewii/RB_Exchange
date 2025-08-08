@@ -2,7 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from authentication.serializers import LoginSerializer
+from drf_spectacular.utils import extend_schema  # <-- Ajouté
 
+@extend_schema(
+    request=LoginSerializer,
+    responses={200: None}
+)
 class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)

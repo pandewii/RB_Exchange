@@ -28,3 +28,6 @@ class LoginSerializer(serializers.Serializer):
             'role': user.role, # type: ignore
             'email': user.email
         }
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
