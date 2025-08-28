@@ -16,7 +16,7 @@ class ScrapedCurrencyRaw(models.Model):
     )
 
     nom_devise_brut = models.CharField(max_length=100, verbose_name="Nom de la devise brute", blank=True)
-    code_iso_brut = models.CharField(max_length=10, verbose_name="Code ISO brut", blank=True)
+    code_iso_brut = models.CharField(max_length=100, verbose_name="Code ISO brut", blank=True)
     
     # Correction: Un seul champ pour la valeur du taux brut
     valeur_brute = models.DecimalField(

@@ -24,14 +24,14 @@ from django.db.models import Q # Add Q for advanced filtering
             name='fromCurrency',
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            required=False, # CHANGED: Not required anymore
+            required=False,
             description="Code ISO de la devise source (ex: USD). Par défaut, c'est la devise de la zone du WS_USER."
         ),
         OpenApiParameter(
             name='toCurrency',
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            required=False, # CHANGED: Not required anymore
+            required=False,
             description="Code ISO de la devise cible (ex: EUR). Par défaut, c'est la devise de la zone du WS_USER."
         ),
         OpenApiParameter(
@@ -62,13 +62,12 @@ class CurrencyConvertView(APIView):
                 {"error": "Le paramètre 'amount' est requis."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         user_zone = request.user.zone
         if not user_zone:
             return Response({"error": "Votre compte WS_USER n'est pas associé à une zone monétaire."},
                             status=status.HTTP_403_FORBIDDEN)
 
-        # Assigner la devise par défaut de la zone si l'un des champs est vide
         base_currency_code = user_zone.nom.upper()
         if not from_currency_code and not to_currency_code:
             return Response({"error": "Au moins un des champs 'fromCurrency' ou 'toCurrency' doit être spécifié."},
@@ -91,10 +90,9 @@ class CurrencyConvertView(APIView):
                 return Response({"error": "Le montant 'amount' est invalide."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Fonction utilitaire pour récupérer le taux de manière intelligente
             def get_rate_value(currency_code, zone, date=None):
                 if currency_code == base_currency_code:
-                    return Decimal('1.0') # Taux implicite pour la devise de base
+                    return Decimal('1.0')
 
                 if date:
                     rate_obj = ExchangeRate.objects.filter(
@@ -122,10 +120,9 @@ class CurrencyConvertView(APIView):
                     message += " (dernier taux disponible)."
                 return Response({"error": message + " Vérifiez les taux disponibles."}, status=status.HTTP_404_NOT_FOUND)
 
-            exchange_rate_used = to_rate / from_rate
+            exchange_rate_used = from_rate / to_rate
             converted_amount = amount * exchange_rate_used
         
-        # Journalisation de l'opération de conversion
         log_action(
             actor_id=request.user.pk,
             action='API_CURRENCY_CONVERTED',
@@ -140,7 +137,7 @@ class CurrencyConvertView(APIView):
             "fromCurrency": from_currency_code,
             "toCurrency": to_currency_code,
             "amount": float(Decimal(amount_str)),
-            "convertedAmount": float(converted_amount.quantize(Decimal('0.01'))),
+            "convertedAmount": float(converted_amount.quantize(Decimal('0.000001'))), # MODIFIED: Higher precision for output
             "exchangeRateUsed": float(exchange_rate_used.quantize(Decimal('0.000000001'))),
             "source": date_str if date_str else "Dernier taux disponible (is_latest)"
         }, status=status.HTTP_200_OK)

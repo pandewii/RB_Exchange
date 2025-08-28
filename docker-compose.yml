@@ -1,0 +1,56 @@
+name: rb_exchange
+
+services:
+  web:
+    build: .
+    env_file: .env
+    command: ["bash", "-lc", "./entrypoint.sh web"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [app-net]
+
+  worker:
+    build: .
+    env_file: .env
+    command: ["bash", "-lc", "./entrypoint.sh worker"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [app-net]
+
+  beat:
+    build: .
+    env_file: .env
+    command: ["bash", "-lc", "./entrypoint.sh beat"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [app-net]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    # ⚠️ En prod, évite d’exposer Redis. Garde la ligne suivante seulement en local.
+    ports:
+     - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks: [app-net]
+
+networks:
+  app-net:
+
+volumes:
+  redis-data:

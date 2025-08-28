@@ -1,0 +1,54 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+
+# --- Django ---
+# (Ne PAS ignorer tes "static" d’app — on ignore seulement le dossier de collecte)
+*.sqlite3
+db.sqlite3
+staticfiles/          # = ton STATIC_ROOT après collectstatic
+*.log
+
+
+.env
+.env.*
+*.pem
+*.key
+
+
+.git
+.gitattributes
+.gitignore
+.vscode/
+.idea/
+*.code-workspace
+
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+
+.DS_Store
+Thumbs.db
+
+
+docker-compose.override.yml

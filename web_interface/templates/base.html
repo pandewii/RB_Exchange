@@ -31,7 +31,7 @@
         <div class="container mx-auto flex justify-between items-center">
             {# Use request.user for dashboard links #}
             <a href="{% if request.user.is_authenticated and request.user.role == 'SUPERADMIN' %}{% url 'superadmin_dashboard' %}{% elif request.user.is_authenticated and request.user.role == 'ADMIN_TECH' %}{% url 'admin_technique_dashboard' %}{% elif request.user.is_authenticated and request.user.role == 'ADMIN_ZONE' %}{% url 'admin_zone_dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="flex items-center gap-3">
-                <img src="{% static 'img/img.png' %}" alt="Logo La Rose Blanche" class="h-10 w-auto">
+                <img src="{% static 'img/img_logo.png' %}" alt="Logo La Rose Blanche" class="h-10 w-auto">
                 <span class="text-lg font-semibold">RB_Exchange</span>
             </a>
             {# Protect UI elements from WS_USER and unauthenticated users #}
