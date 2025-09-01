@@ -1,43 +1,45 @@
 #!/usr/bin/env bash
 set -e
 
-MODE="${1:-web}"
+# Optionnel : verbeux pour debug
+# set -x
 
-# ===== Wait-for-Postgres =====
-: "${DB_HOST:?DB_HOST non défini}"
-: "${DB_PORT:?DB_PORT non défini}"
-
-echo "⏳ Waiting for Postgres at $DB_HOST:$DB_PORT ..."
-until nc -z -v -w30 "$DB_HOST" "$DB_PORT"; do
-  echo "  Postgres not ready yet..."
-  sleep 2
-done
-echo "✅ Postgres is up."
-
-# ===== Migrations =====
-python manage.py migrate --noinput
-
-# ===== Collect static (optionnel) =====
-if [ "${COLLECT_STATIC:-0}" = "1" ]; then
-  python manage.py collectstatic --noinput
-fi
-
-# ===== Run mode =====
-case "$MODE" in
+case "$1" in
   web)
-    echo "🚀 Starting Django dev server on 0.0.0.0:8000"
-    exec python manage.py runserver 0.0.0.0:8000
+    python manage.py migrate --noinput
+    # collectstatic si tu utilises whitenoise/Nginx
+    python manage.py collectstatic --noinput || true
+    # Gunicorn avec timeouts & logs
+    exec gunicorn rb_exchange.wsgi:application \
+      --bind 0.0.0.0:8000 \
+      --workers ${GUNICORN_WORKERS:-3} \
+      --timeout ${GUNICORN_TIMEOUT:-120} \
+      --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} \
+      --access-logfile - \
+      --error-logfile -
     ;;
+
   worker)
-    echo "⚙️  Starting Celery worker (app=${CELERY_APP:-config})"
-    exec celery -A "${CELERY_APP:-config}" worker -l info
+    POOL="${CELERY_POOL:-prefork}"
+    CONCURRENCY="${CELERY_CONCURRENCY:-2}"
+    # Quelques sécurités utiles en prod
+    MAX_TASKS="${CELERY_MAX_TASKS_PER_CHILD:-100}"
+    PREFETCH="${CELERY_PREFETCH_MULTIPLIER:-4}"
+    exec celery -A rb_exchange worker -l info \
+      --pool="$POOL" \
+      --concurrency="$CONCURRENCY" \
+      --max-tasks-per-child="$MAX_TASKS" \
+      --prefetch-multiplier="$PREFETCH"
     ;;
+
   beat)
-    echo "⏰ Starting Celery beat (app=${CELERY_APP:-config})"
-    exec celery -A "${CELERY_APP:-config}" beat -l info
+    # PID file pour éviter double Beat
+    exec celery -A rb_exchange beat --loglevel=info \
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler \
+      --pidfile=/tmp/celerybeat.pid
     ;;
+
   *)
-    echo "Unknown mode '$MODE'. Use: web | worker | beat"
-    exit 1
+    exec "$@"
     ;;
 esac

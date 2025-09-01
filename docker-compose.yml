@@ -1,0 +1,63 @@
+name: rb_exchange
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./entrypoint.sh", "web"]
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # On teste la page /login/ (pas besoin de /healthz)
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/login/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./entrypoint.sh", "worker"]
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./entrypoint.sh", "beat"]
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server","--appendonly","yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "6379:6379"   # utile pour debug depuis l’hôte
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:

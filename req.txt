@@ -29,6 +29,7 @@ django-htmx>=1.16.0
 
 # Déploiement
 gunicorn>=21.2.0
+whitenoise>=6.6
 
 # Utilitaires
 email-validator
